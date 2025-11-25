@@ -1,0 +1,36 @@
+# Dependencias
+node_modules/
+venv/
+__pycache__/
+*.pyc
+.next/
+
+# Archivos de entorno
+.env
+.env.local
+.env.production
+
+# Credenciales
+credentials.json
+token.json
+client_secret*.json
+
+# Logs
+logs/
+*.log
+
+# Archivos temporales
+temp/
+*.tmp
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Build
+dist/
+build/
+out/

@@ -1,0 +1,29 @@
+# Backend - Sistema de Gestión de Documentos
+# Dependencias Python
+
+# API y Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+
+# Google Drive API
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# OCR
+easyocr
+opencv-python
+Pillow
+numpy
+
+# Base de datos
+supabase
+
+# Utilidades
+python-dotenv
+requests
+
+# Para procesamiento de imágenes
+scipy
