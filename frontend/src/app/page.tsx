@@ -18,7 +18,9 @@ import {
   AlertCircle,
   BarChart3,
   Download,
-  PanelLeftOpen
+  PanelLeftOpen,
+  CheckSquare,
+  Square
 } from 'lucide-react'
 import { SearchFilters } from '@/components/SearchFilters'
 import { DocumentCard } from '@/components/DocumentCard'
@@ -30,6 +32,7 @@ import { AnalyticsDashboard } from '@/components/AnalyticsDashboard'
 import { ExportModal } from '@/components/ExportModal'
 import { Sidebar } from '@/components/Sidebar'
 import { Pagination } from '@/components/Pagination'
+import { SelectionToolbar } from '@/components/SelectionToolbar'
 import { useDocuments } from '@/hooks/useDocuments'
 import { useStats } from '@/hooks/useStats'
 import { useAuth } from '@/contexts/AuthContext'
@@ -43,6 +46,8 @@ export default function Home() {
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showSidebar, setShowSidebar] = useState(false)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -116,6 +121,43 @@ export default function Home() {
     setCurrentPage(1)
   }
 
+  // Funciones de selección
+  const handleToggleSelect = (docId: number) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(docId)) {
+        newSet.delete(docId)
+      } else {
+        newSet.add(docId)
+      }
+      // Activar modo selección si hay seleccionados
+      if (newSet.size > 0) {
+        setSelectionMode(true)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === documents.length) {
+      // Deseleccionar todos
+      setSelectedIds(new Set())
+      setSelectionMode(false)
+    } else {
+      // Seleccionar todos
+      setSelectedIds(new Set(documents.map(d => d.id)))
+    }
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set())
+    setSelectionMode(false)
+  }
+
+  const selectedDocuments = useMemo(() => {
+    return documents.filter(d => selectedIds.has(d.id))
+  }, [documents, selectedIds])
+
   // Mostrar loading mientras verifica autenticación
   if (authLoading) {
     return (
@@ -176,6 +218,22 @@ export default function Home() {
           >
             <Download className="w-4 h-4" />
             Exportar Datos
+          </button>
+          <button
+            onClick={() => {
+              setSelectionMode(!selectionMode)
+              if (selectionMode) {
+                setSelectedIds(new Set())
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all ${
+              selectionMode 
+                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+            }`}
+          >
+            {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+            {selectionMode ? 'Cancelar Selección' : 'Seleccionar'}
           </button>
         </motion.div>
 
@@ -344,6 +402,9 @@ export default function Home() {
                       <DocumentCard 
                         document={doc} 
                         onView={() => handleViewDocument(doc)}
+                        isSelected={selectedIds.has(doc.id)}
+                        onToggleSelect={() => handleToggleSelect(doc.id)}
+                        selectionMode={selectionMode}
                       />
                     </motion.div>
                   ))}
@@ -395,6 +456,15 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      {/* Selection Toolbar */}
+      <SelectionToolbar
+        selectedDocuments={selectedDocuments}
+        totalDocuments={documents.length}
+        onClearSelection={handleClearSelection}
+        onSelectAll={handleSelectAll}
+        isAllSelected={selectedIds.size === documents.length && documents.length > 0}
+      />
     </main>
   )
 }

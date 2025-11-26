@@ -11,7 +11,8 @@ import {
   Eye,
   Truck,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Check
 } from 'lucide-react'
 import { Documento } from '@/types'
 import { formatShortDate, getStatusColor, getStatusLabel, truncateText } from '@/lib/utils'
@@ -19,20 +20,58 @@ import { formatShortDate, getStatusColor, getStatusLabel, truncateText } from '@
 interface DocumentCardProps {
   document: Documento
   onView: () => void
+  isSelected?: boolean
+  onToggleSelect?: () => void
+  selectionMode?: boolean
 }
 
-export function DocumentCard({ document, onView }: DocumentCardProps) {
+export function DocumentCard({ document, onView, isSelected = false, onToggleSelect, selectionMode = false }: DocumentCardProps) {
   const totalProductos = document.productos?.length || 0
   const totalCantidad = document.cantidades?.reduce((acc, curr) => acc + parseInt(curr || '0'), 0) || 0
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (selectionMode && onToggleSelect) {
+      e.stopPropagation()
+      onToggleSelect()
+    }
+  }
 
   return (
     <motion.div
       whileHover={{ y: -6, scale: 1.01 }}
       transition={{ duration: 0.2 }}
-      className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col h-full"
+      onClick={handleCardClick}
+      className={`group relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-2xl border-2 overflow-hidden flex flex-col h-full transition-all ${
+        isSelected 
+          ? 'border-indigo-500 ring-2 ring-indigo-200 dark:ring-indigo-800' 
+          : 'border-gray-100 dark:border-gray-700'
+      } ${selectionMode ? 'cursor-pointer' : ''}`}
     >
       {/* Barra de estado superior */}
       <div className={`h-1.5 w-full ${document.firmado ? 'bg-gradient-to-r from-emerald-400 to-green-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`}></div>
+      
+      {/* Checkbox de selección */}
+      {(selectionMode || isSelected) && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute top-4 right-4 z-10"
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleSelect?.()
+            }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+              isSelected
+                ? 'bg-indigo-500 text-white shadow-lg'
+                : 'bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-500 hover:border-indigo-500'
+            }`}
+          >
+            {isSelected && <Check className="w-4 h-4" />}
+          </button>
+        </motion.div>
+      )}
       
       <div className="p-5 flex flex-col h-full">
         {/* Header */}
