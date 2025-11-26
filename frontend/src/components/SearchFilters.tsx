@@ -133,7 +133,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             value={filters.palabra_clave || ''}
             onChange={(e) => handleChange('palabra_clave', e.target.value)}
             onKeyDown={handleKeyPress}
-            className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm hover:shadow-md"
+            className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
           />
         </div>
       </div>
@@ -142,7 +142,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Número de Guía */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             📋 Número de Guía
           </label>
           <input
@@ -151,13 +151,13 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             value={filters.numero_guia || ''}
             onChange={(e) => handleChange('numero_guia', e.target.value)}
             onKeyDown={handleKeyPress}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100"
           />
         </div>
 
         {/* Fecha Desde */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <Calendar className="inline w-4 h-4 mr-1 text-blue-500" />
             Fecha Desde
           </label>
@@ -165,13 +165,13 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             type="date"
             value={filters.fecha_desde || ''}
             onChange={(e) => handleChange('fecha_desde', e.target.value)}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100"
           />
         </div>
 
         {/* Fecha Hasta */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <Calendar className="inline w-4 h-4 mr-1 text-blue-500" />
             Fecha Hasta
           </label>
@@ -179,13 +179,13 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             type="date"
             value={filters.fecha_hasta || ''}
             onChange={(e) => handleChange('fecha_hasta', e.target.value)}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100"
           />
         </div>
 
         {/* Estado Firmado */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             ✍️ Estado de Firma
           </label>
           <select
@@ -194,7 +194,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
               const value = e.target.value
               handleChange('firmado', value === '' ? undefined : value === 'true')
             }}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md appearance-none cursor-pointer"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md appearance-none cursor-pointer text-gray-900 dark:text-gray-100"
           >
             <option value="">Todos</option>
             <option value="true">✅ Firmados</option>
@@ -207,7 +207,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Proveedor */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <User className="inline w-4 h-4 mr-1 text-indigo-500" />
             Proveedor
           </label>
@@ -215,7 +215,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             value={filters.proveedor || ''}
             onChange={(e) => handleChange('proveedor', e.target.value)}
             disabled={loadingProveedores}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md appearance-none cursor-pointer disabled:opacity-50"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md appearance-none cursor-pointer disabled:opacity-50 text-gray-900 dark:text-gray-100"
           >
             <option value="">Todos los proveedores</option>
             {proveedores.map((proveedor) => (
@@ -228,7 +228,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
 
         {/* Producto - búsqueda simple */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <Package className="inline w-4 h-4 mr-1 text-green-500" />
             Buscar Producto
           </label>
@@ -238,13 +238,13 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             value={filters.producto || ''}
             onChange={(e) => handleChange('producto', e.target.value)}
             onKeyDown={handleKeyPress}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100"
           />
         </div>
 
         {/* Transportista */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <Truck className="inline w-4 h-4 mr-1 text-orange-500" />
             Transportista
           </label>
@@ -254,15 +254,15 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
             value={filters.transportista || ''}
             onChange={(e) => handleChange('transportista', e.target.value)}
             onKeyDown={handleKeyPress}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md"
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm hover:shadow-md text-gray-900 dark:text-gray-100"
           />
         </div>
       </div>
 
       {/* Selector de múltiples productos con checkboxes */}
-      <div className="relative">
+      <div className="relative z-[60]">
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-sm font-semibold text-gray-700">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
             <Package className="inline w-4 h-4 mr-1 text-purple-500" />
             Seleccionar Productos (múltiple)
           </label>
@@ -277,10 +277,10 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
         </div>
         
         <div 
-          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl cursor-pointer flex items-center justify-between shadow-sm hover:shadow-md transition-all"
+          className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer flex items-center justify-between shadow-sm hover:shadow-md transition-all"
           onClick={handleOpenDropdown}
         >
-          <span className={selectedProductos.length === 0 ? 'text-gray-400' : 'text-gray-700'}>
+          <span className={selectedProductos.length === 0 ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}>
             {loadingProductos 
               ? '⏳ Cargando productos...'
               : selectedProductos.length === 0 
@@ -297,7 +297,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-80 overflow-hidden"
+              className="absolute z-[100] w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-h-80 overflow-hidden"
             >
               {/* Buscador dentro del dropdown */}
               <div className="p-3 border-b border-gray-100 bg-gray-50">

@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Documento, SearchParams } from '@/types'
 import { 
   getDocuments, 
-  searchDocuments as searchDocs, 
-  subscribeToDocuments 
+  searchDocuments as searchDocs
 } from '@/lib/supabase'
 
 export function useDocuments() {
@@ -41,29 +40,8 @@ export function useDocuments() {
 
   useEffect(() => {
     fetchDocuments()
-
-    // Suscribirse a cambios en tiempo real
-    const subscription = subscribeToDocuments((payload) => {
-      console.log('Cambio detectado:', payload)
-      
-      if (payload.eventType === 'INSERT') {
-        setDocuments(prev => [payload.new as Documento, ...prev])
-      } else if (payload.eventType === 'UPDATE') {
-        setDocuments(prev => 
-          prev.map(doc => 
-            doc.id === payload.new.id ? payload.new as Documento : doc
-          )
-        )
-      } else if (payload.eventType === 'DELETE') {
-        setDocuments(prev => 
-          prev.filter(doc => doc.id !== payload.old.id)
-        )
-      }
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    // Nota: Se removió la suscripción en tiempo real para evitar recargas automáticas
+    // Si deseas actualizaciones en tiempo real, usa el botón de refrescar manualmente
   }, [fetchDocuments])
 
   return {
