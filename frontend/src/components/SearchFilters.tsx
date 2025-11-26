@@ -297,7 +297,7 @@ export function SearchFilters({ onSearch }: SearchFiltersProps) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="absolute z-[100] w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-h-80 overflow-hidden"
+              className="absolute z-[999] w-full mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-h-80 overflow-hidden"
             >
               {/* Buscador dentro del dropdown */}
               <div className="p-3 border-b border-gray-100 bg-gray-50">

@@ -148,7 +148,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
         >
-          <div className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl p-6 md:p-8 border border-white/50 dark:border-gray-700">
+          <div className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl p-6 md:p-8 border border-white/50 dark:border-gray-700 overflow-visible relative z-40">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
@@ -182,6 +182,7 @@ export default function Home() {
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.3 }}
+                  className="overflow-visible relative z-50"
                 >
                   <SearchFilters onSearch={handleSearch} />
                 </motion.div>
