@@ -34,7 +34,18 @@ export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps
   // Descargar un solo archivo TIF
   const downloadSingleFile = (doc: Documento) => {
     const downloadUrl = `https://drive.google.com/uc?export=download&id=${doc.drive_file_id}`
-    window.open(downloadUrl, '_blank')
+    
+    // Usar un iframe oculto para la descarga
+    const iframe = document.createElement('iframe')
+    iframe.style.display = 'none'
+    iframe.src = downloadUrl
+    document.body.appendChild(iframe)
+    
+    // Limpiar después de un tiempo
+    setTimeout(() => {
+      document.body.removeChild(iframe)
+    }, 5000)
+    
     setDownloadedItems(prev => new Set(prev).add(doc.id))
     toast.success(`Descargando: ${doc.numero_guia || doc.drive_file_name}`)
   }
@@ -45,7 +56,7 @@ export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps
     window.open(viewUrl, '_blank')
   }
 
-  // Descargar todos los archivos TIF (abre múltiples descargas)
+  // Descargar todos los archivos TIF secuencialmente
   const downloadAllFiles = async () => {
     setDownloading(true)
     setDownloadProgress({ current: 0, total: documents.length })
@@ -55,15 +66,27 @@ export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps
       setDownloadProgress({ current: i + 1, total: documents.length })
       
       const downloadUrl = `https://drive.google.com/uc?export=download&id=${doc.drive_file_id}`
-      window.open(downloadUrl, '_blank')
+      
+      // Crear un enlace temporal y hacer clic programáticamente
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.download = doc.drive_file_name || `${doc.numero_guia}.tif`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
       setDownloadedItems(prev => new Set(prev).add(doc.id))
       
-      // Esperar un poco entre descargas para no saturar
-      await new Promise(resolve => setTimeout(resolve, 800))
+      // Esperar entre descargas para evitar bloqueos
+      if (i < documents.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
+      }
     }
 
     setDownloading(false)
-    toast.success(`${documents.length} descargas iniciadas`)
+    toast.success(`${documents.length} descargas iniciadas. Revisa tu carpeta de descargas.`, { duration: 5000 })
   }
 
   // Descargar ZIP con datos JSON
