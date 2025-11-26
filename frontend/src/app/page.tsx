@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Search, 
@@ -17,7 +17,8 @@ import {
   Users,
   AlertCircle,
   BarChart3,
-  Download
+  Download,
+  PanelLeftOpen
 } from 'lucide-react'
 import { SearchFilters } from '@/components/SearchFilters'
 import { DocumentCard } from '@/components/DocumentCard'
@@ -27,6 +28,8 @@ import { Header } from '@/components/Header'
 import { LoginPage } from '@/components/LoginPage'
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard'
 import { ExportModal } from '@/components/ExportModal'
+import { Sidebar } from '@/components/Sidebar'
+import { Pagination } from '@/components/Pagination'
 import { useDocuments } from '@/hooks/useDocuments'
 import { useStats } from '@/hooks/useStats'
 import { useAuth } from '@/contexts/AuthContext'
@@ -39,6 +42,11 @@ export default function Home() {
   const [searchParams, setSearchParams] = useState<SearchParams>({})
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(false)
+  
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(12)
   
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   
@@ -52,18 +60,31 @@ export default function Home() {
   
   const { stats, loading: statsLoading } = useStats()
 
-  // Auto-refresh cada 30 segundos
+  // Calcular documentos paginados
+  const paginatedDocuments = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return documents.slice(startIndex, endIndex)
+  }, [documents, currentPage, itemsPerPage])
+
+  const totalPages = Math.ceil(documents.length / itemsPerPage)
+
+  // Reset página cuando cambian los documentos
   useEffect(() => {
-    const interval = setInterval(() => {
-      refetch()
-    }, 30000)
-    
-    return () => clearInterval(interval)
-  }, [refetch])
+    setCurrentPage(1)
+  }, [documents.length])
 
   const handleSearch = async (params: SearchParams) => {
     setSearchParams(params)
+    setCurrentPage(1) // Reset a primera página al buscar
     await searchDocuments(params)
+  }
+
+  const handleQuickFilter = async (filter: { firmado?: boolean; fecha_desde?: string }) => {
+    setShowFilters(true)
+    setCurrentPage(1)
+    await searchDocuments(filter)
+    toast.success('Filtro aplicado')
   }
 
   const handleRefresh = async () => {
@@ -85,6 +106,16 @@ export default function Home() {
     setSelectedDocument(null)
   }
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleItemsPerPageChange = (items: number) => {
+    setItemsPerPage(items)
+    setCurrentPage(1)
+  }
+
   // Mostrar loading mientras verifica autenticación
   if (authLoading) {
     return (
@@ -104,19 +135,34 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-100/50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 pattern-bg transition-colors duration-300 dark:text-white">
+      {/* Sidebar */}
+      <Sidebar 
+        documents={documents}
+        isOpen={showSidebar}
+        onToggle={() => setShowSidebar(!showSidebar)}
+        onQuickFilter={handleQuickFilter}
+      />
+
       <Header 
         onRefresh={handleRefresh} 
         onOpenAnalytics={() => setShowAnalytics(true)}
         onOpenExport={() => setShowExport(true)}
       />
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 transition-all duration-300 ${showSidebar ? 'lg:ml-80' : ''}`}>
         {/* Botones de acceso rápido */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-wrap gap-3"
         >
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all border border-gray-200 dark:border-gray-700"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+            Panel de Control
+          </button>
           <button
             onClick={() => setShowAnalytics(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all"
@@ -283,25 +329,37 @@ export default function Home() {
               </p>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <AnimatePresence mode="popLayout">
-                {documents.map((doc, index) => (
-                  <motion.div
-                    key={doc.id}
-                    layout
-                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                  >
-                    <DocumentCard 
-                      document={doc} 
-                      onView={() => handleViewDocument(doc)}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence mode="popLayout">
+                  {paginatedDocuments.map((doc, index) => (
+                    <motion.div
+                      key={doc.id}
+                      layout
+                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                    >
+                      <DocumentCard 
+                        document={doc} 
+                        onView={() => handleViewDocument(doc)}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Paginación */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={documents.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+              />
+            </>
           )}
         </motion.div>
       </div>
