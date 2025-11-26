@@ -6,15 +6,13 @@ import {
   X, 
   Download,
   FileArchive,
-  ExternalLink,
   FileText,
   Image,
   CheckCircle,
   Loader2,
   ChevronDown,
   ChevronUp,
-  Eye,
-  FolderOpen
+  Eye
 } from 'lucide-react'
 import { Documento } from '@/types'
 import toast from 'react-hot-toast'
@@ -28,7 +26,7 @@ interface DownloadModalProps {
 
 export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps) {
   const [downloading, setDownloading] = useState(false)
-  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0, status: '' })
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 })
   const [expandedList, setExpandedList] = useState(true)
   const [downloadedItems, setDownloadedItems] = useState<Set<number>>(new Set())
 
@@ -45,205 +43,37 @@ export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps
     window.open(viewUrl, '_blank')
   }
 
-  // Crear y descargar página HTML con links
-  const downloadHtmlWithLinks = () => {
-    const htmlContent = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Descargar Guías de Remisión</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 20px;
-    }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-      overflow: hidden;
-    }
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 24px;
-      text-align: center;
-    }
-    .header h1 { font-size: 24px; margin-bottom: 8px; }
-    .header p { opacity: 0.9; font-size: 14px; }
-    .instructions {
-      background: #FEF3C7;
-      border-left: 4px solid #F59E0B;
-      padding: 16px 20px;
-      margin: 20px;
-      border-radius: 8px;
-    }
-    .instructions h3 { color: #92400E; margin-bottom: 8px; }
-    .instructions ol { margin-left: 20px; color: #78350F; }
-    .instructions li { margin: 4px 0; }
-    .download-all {
-      display: block;
-      width: calc(100% - 40px);
-      margin: 20px;
-      padding: 16px;
-      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-    }
-    .download-all:hover { opacity: 0.9; }
-    .list { padding: 0 20px 20px; }
-    .list h3 { color: #6B7280; font-size: 12px; text-transform: uppercase; margin-bottom: 12px; }
-    .item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px;
-      border: 1px solid #E5E7EB;
-      border-radius: 8px;
-      margin-bottom: 8px;
-    }
-    .item:hover { background: #F9FAFB; }
-    .item-info { flex: 1; }
-    .item-info .name { font-weight: 600; color: #1F2937; }
-    .item-info .file { font-size: 12px; color: #6B7280; }
-    .item-actions { display: flex; gap: 8px; }
-    .btn {
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 500;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .btn-primary { background: #10B981; color: white; }
-    .btn-secondary { background: #E5E7EB; color: #374151; }
-    .btn:hover { opacity: 0.85; }
-    .counter {
-      text-align: center;
-      padding: 16px;
-      background: #F3F4F6;
-      color: #6B7280;
-      font-size: 14px;
-    }
-    #progress { display: none; text-align: center; padding: 20px; background: #ECFDF5; margin: 20px; border-radius: 8px; }
-    #progress.show { display: block; }
-    #progress .count { font-size: 24px; font-weight: bold; color: #059669; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>📄 Guías de Remisión</h1>
-      <p>Generado el ${new Date().toLocaleString('es-PE')}</p>
-    </div>
-    
-    <div class="instructions">
-      <h3>📥 Instrucciones</h3>
-      <ol>
-        <li>Haz clic en "Descargar" junto a cada documento</li>
-        <li>Si aparece una página de Google Drive, haz clic en "Descargar de todos modos"</li>
-        <li>O usa el botón verde para descargar todas secuencialmente</li>
-      </ol>
-    </div>
-    
-    <div id="progress">
-      <div class="count"><span id="current">0</span> / ${documents.length}</div>
-      <div>Descargando...</div>
-    </div>
-    
-    <button class="download-all" onclick="downloadAll()">
-      ⬇️ Descargar Todas las Imágenes (${documents.length})
-    </button>
-    
-    <div class="list">
-      <h3>Lista de documentos</h3>
-      ${documents.map((doc, i) => `
-        <div class="item" id="item-${i}">
-          <div class="item-info">
-            <div class="name">${doc.numero_guia || 'Sin número'}</div>
-            <div class="file">${doc.drive_file_name || '-'}</div>
-          </div>
-          <div class="item-actions">
-            <a href="https://drive.google.com/file/d/${doc.drive_file_id}/view" target="_blank" class="btn btn-secondary">👁️ Ver</a>
-            <a href="https://drive.google.com/uc?export=download&id=${doc.drive_file_id}" target="_blank" class="btn btn-primary" onclick="markDone(${i})">⬇️ Descargar</a>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-    
-    <div class="counter">
-      Total: ${documents.length} documentos
-    </div>
-  </div>
-  
-  <script>
-    let downloaded = 0;
-    
-    function markDone(index) {
-      const item = document.getElementById('item-' + index);
-      item.style.background = '#ECFDF5';
-      item.style.borderColor = '#10B981';
-      downloaded++;
-    }
-    
-    async function downloadAll() {
-      const links = [
-        ${documents.map(doc => `"https://drive.google.com/uc?export=download&id=${doc.drive_file_id}"`).join(',\n        ')}
-      ];
+  // Descargar todos los archivos TIF secuencialmente
+  const downloadAllFiles = async () => {
+    setDownloading(true)
+    setDownloadProgress({ current: 0, total: documents.length })
+
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i]
+      setDownloadProgress({ current: i + 1, total: documents.length })
       
-      document.getElementById('progress').classList.add('show');
+      const downloadUrl = `https://drive.google.com/uc?export=download&id=${doc.drive_file_id}`
       
-      for (let i = 0; i < links.length; i++) {
-        document.getElementById('current').textContent = i + 1;
-        markDone(i);
-        
-        // Abrir enlace de descarga
-        window.open(links[i], '_blank');
-        
-        // Esperar 2 segundos entre descargas
-        if (i < links.length - 1) {
-          await new Promise(r => setTimeout(r, 2000));
-        }
+      // Crear un enlace temporal y hacer clic programáticamente
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.target = '_blank'
+      link.rel = 'noopener noreferrer'
+      link.download = doc.drive_file_name || `${doc.numero_guia}.tif`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      setDownloadedItems(prev => new Set(prev).add(doc.id))
+      
+      // Esperar entre descargas para evitar bloqueos
+      if (i < documents.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500))
       }
-      
-      document.getElementById('progress').innerHTML = '<div class="count">✅ Completado</div><div>Revisa tu carpeta de descargas</div>';
     }
-  </script>
-</body>
-</html>`
 
-    // Descargar el HTML
-    const blob = new Blob([htmlContent], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `descargar_guias_${new Date().toISOString().split('T')[0]}.html`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-
-    toast.success(
-      <div>
-        <p className="font-semibold">Archivo HTML descargado</p>
-        <p className="text-sm">Ábrelo en tu navegador para descargar las imágenes</p>
-      </div>,
-      { duration: 5000 }
-    )
+    setDownloading(false)
+    toast.success(`${documents.length} descargas iniciadas. Revisa tu carpeta de descargas.`, { duration: 5000 })
   }
 
   // Descargar ZIP con datos JSON
@@ -352,19 +182,33 @@ export function DownloadModal({ documents, isOpen, onClose }: DownloadModalProps
             </h3>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Descargar HTML con links */}
+              {/* Descargar todas las imágenes */}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={downloadHtmlWithLinks}
+                onClick={downloadAllFiles}
                 disabled={downloading}
                 className="flex items-center gap-3 p-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl hover:from-emerald-600 hover:to-green-700 transition-all shadow-lg disabled:opacity-50"
               >
-                <Image className="w-5 h-5" />
-                <div className="text-left">
-                  <div className="font-semibold">Descargar Imágenes TIF</div>
-                  <div className="text-sm text-white/80">Página con links de descarga</div>
-                </div>
+                {downloading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <div className="text-left">
+                      <div className="font-semibold">Descargando...</div>
+                      <div className="text-sm text-white/80">
+                        {downloadProgress.current}/{downloadProgress.total}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Image className="w-5 h-5" />
+                    <div className="text-left">
+                      <div className="font-semibold">Descargar Imágenes TIF</div>
+                      <div className="text-sm text-white/80">Todas las imágenes</div>
+                    </div>
+                  </>
+                )}
               </motion.button>
 
               {/* Descargar datos JSON */}
