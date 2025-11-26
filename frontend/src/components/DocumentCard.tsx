@@ -12,7 +12,10 @@ import {
   Truck,
   MapPin,
   ExternalLink,
-  Check
+  Check,
+  Edit3,
+  MessageSquare,
+  CheckCircle2
 } from 'lucide-react'
 import { Documento } from '@/types'
 import { formatShortDate, getStatusColor, getStatusLabel, truncateText } from '@/lib/utils'
@@ -20,12 +23,13 @@ import { formatShortDate, getStatusColor, getStatusLabel, truncateText } from '@
 interface DocumentCardProps {
   document: Documento
   onView: () => void
+  onEdit?: () => void
   isSelected?: boolean
   onToggleSelect?: () => void
   selectionMode?: boolean
 }
 
-export function DocumentCard({ document, onView, isSelected = false, onToggleSelect, selectionMode = false }: DocumentCardProps) {
+export function DocumentCard({ document, onView, onEdit, isSelected = false, onToggleSelect, selectionMode = false }: DocumentCardProps) {
   const totalProductos = document.productos?.length || 0
   const totalCantidad = document.cantidades?.reduce((acc, curr) => acc + parseInt(curr || '0'), 0) || 0
 
@@ -188,21 +192,47 @@ export function DocumentCard({ document, onView, isSelected = false, onToggleSel
             <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${getStatusColor(document.ocr_status)}`}>
               {getStatusLabel(document.ocr_status)}
             </span>
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              {document.numero_paginas} pág.
-            </span>
+            {document.revisado && (
+              <span className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs">
+                <CheckCircle2 className="w-3 h-3" />
+              </span>
+            )}
+            {document.notas && (
+              <span className="flex items-center gap-1 px-2 py-1 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded-lg text-xs" title={document.notas}>
+                <MessageSquare className="w-3 h-3" />
+              </span>
+            )}
           </div>
           
-          <motion.button
-            whileHover={{ scale: 1.05, x: 2 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={onView}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg group/btn"
-          >
-            <Eye className="w-4 h-4" />
-            Ver
-            <ExternalLink className="w-3 h-3 opacity-0 -ml-1 group-hover/btn:opacity-100 group-hover/btn:ml-0 transition-all" />
-          </motion.button>
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit()
+                }}
+                className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                title="Editar documento"
+              >
+                <Edit3 className="w-4 h-4" />
+              </motion.button>
+            )}
+            <motion.button
+              whileHover={{ scale: 1.05, x: 2 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onView()
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:from-blue-600 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg group/btn"
+            >
+              <Eye className="w-4 h-4" />
+              Ver
+              <ExternalLink className="w-3 h-3 opacity-0 -ml-1 group-hover/btn:opacity-100 group-hover/btn:ml-0 transition-all" />
+            </motion.button>
+          </div>
         </div>
       </div>
     </motion.div>

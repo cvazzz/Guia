@@ -33,6 +33,8 @@ import { ExportModal } from '@/components/ExportModal'
 import { Sidebar } from '@/components/Sidebar'
 import { Pagination } from '@/components/Pagination'
 import { SelectionToolbar } from '@/components/SelectionToolbar'
+import { EditDocumentModal } from '@/components/EditDocumentModal'
+import { NotificationCenter } from '@/components/NotificationCenter'
 import { useDocuments } from '@/hooks/useDocuments'
 import { useStats } from '@/hooks/useStats'
 import { useAuth } from '@/contexts/AuthContext'
@@ -48,6 +50,8 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [editingDocument, setEditingDocument] = useState<Documento | null>(null)
+  const [newDocsCount, setNewDocsCount] = useState(0)
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -158,6 +162,12 @@ export default function Home() {
     return documents.filter(d => selectedIds.has(d.id))
   }, [documents, selectedIds])
 
+  // Handler para actualizar documento después de editar
+  const handleDocumentSave = (updatedDoc: Documento) => {
+    refetch() // Refrescar la lista
+    setEditingDocument(null)
+  }
+
   // Mostrar loading mientras verifica autenticación
   if (authLoading) {
     return (
@@ -219,6 +229,7 @@ export default function Home() {
             <Download className="w-4 h-4" />
             Exportar Datos
           </button>
+          <NotificationCenter onNewDocumentsFound={setNewDocsCount} />
           <button
             onClick={() => {
               setSelectionMode(!selectionMode)
@@ -402,6 +413,7 @@ export default function Home() {
                       <DocumentCard 
                         document={doc} 
                         onView={() => handleViewDocument(doc)}
+                        onEdit={() => setEditingDocument(doc)}
                         isSelected={selectedIds.has(doc.id)}
                         onToggleSelect={() => handleToggleSelect(doc.id)}
                         selectionMode={selectionMode}
@@ -465,6 +477,18 @@ export default function Home() {
         onSelectAll={handleSelectAll}
         isAllSelected={selectedIds.size === documents.length && documents.length > 0}
       />
+
+      {/* Edit Document Modal */}
+      <AnimatePresence>
+        {editingDocument && (
+          <EditDocumentModal
+            document={editingDocument}
+            isOpen={!!editingDocument}
+            onClose={() => setEditingDocument(null)}
+            onSave={handleDocumentSave}
+          />
+        )}
+      </AnimatePresence>
     </main>
   )
 }

@@ -40,6 +40,8 @@ export interface Documento {
   procesado_en: string | null
   created_at: string | null
   updated_at: string | null
+  notas: string | null
+  revisado: boolean
 }
 
 export interface SearchParams {
