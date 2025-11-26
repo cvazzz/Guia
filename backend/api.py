@@ -3,12 +3,13 @@ API REST con FastAPI para el sistema de gestión de documentos.
 """
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 import logging
 import asyncio
+import io
 
 from services.supabase_service import get_supabase_service
 from services.drive_service import get_drive_service
@@ -265,6 +266,41 @@ async def delete_documento(doc_id: int):
         raise HTTPException(status_code=500, detail="Error eliminando documento")
     
     return {"message": "Documento eliminado", "id": doc_id}
+
+
+@app.get("/api/documentos/download/{drive_file_id}")
+async def download_document_image(drive_file_id: str):
+    """Descarga la imagen TIF de un documento desde Google Drive."""
+    global drive_service
+    
+    try:
+        if not drive_service:
+            drive_service = get_drive_service()
+        
+        # Descargar archivo a memoria
+        file_content = drive_service.download_file_to_memory(drive_file_id)
+        
+        if not file_content:
+            raise HTTPException(status_code=404, detail="Archivo no encontrado en Google Drive")
+        
+        # Obtener nombre del archivo
+        file_info = drive_service.get_file_info(drive_file_id)
+        filename = file_info.get('name', f'{drive_file_id}.tif') if file_info else f'{drive_file_id}.tif'
+        
+        # Retornar como streaming response
+        return StreamingResponse(
+            io.BytesIO(file_content),
+            media_type="image/tiff",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error descargando archivo {drive_file_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error descargando archivo: {str(e)}")
 
 
 @app.post("/api/sync/trigger")

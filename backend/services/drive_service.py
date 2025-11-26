@@ -171,6 +171,52 @@ class GoogleDriveService:
         """
         return f"https://drive.google.com/thumbnail?id={file_id}&sz=w800"
     
+    def download_file_to_memory(self, file_id: str) -> Optional[bytes]:
+        """
+        Descarga un archivo de Google Drive a memoria (bytes).
+        Útil para streaming directo sin guardar en disco.
+        """
+        if not self.service:
+            logger.error("Servicio no inicializado.")
+            return None
+        
+        try:
+            request = self.service.files().get_media(fileId=file_id)
+            
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+            
+            fh.seek(0)
+            content = fh.read()
+            logger.info(f"Archivo {file_id} descargado a memoria: {len(content)} bytes")
+            return content
+            
+        except HttpError as e:
+            logger.error(f"Error al descargar archivo {file_id} a memoria: {str(e)}")
+            return None
+    
+    def get_file_info(self, file_id: str) -> Optional[Dict]:
+        """
+        Obtiene información de un archivo específico.
+        """
+        if not self.service:
+            logger.error("Servicio no inicializado.")
+            return None
+        
+        try:
+            file_info = self.service.files().get(
+                fileId=file_id,
+                fields='id, name, mimeType, size, createdTime, modifiedTime'
+            ).execute()
+            return file_info
+        except HttpError as e:
+            logger.error(f"Error al obtener info del archivo {file_id}: {str(e)}")
+            return None
+    
     def get_new_files(self) -> List[Dict]:
         """
         Obtiene archivos nuevos que aún no han sido procesados.
