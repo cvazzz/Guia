@@ -55,8 +55,7 @@ export function Pagination({
     return pages
   }
 
-  if (totalPages <= 1) return null
-
+  // Siempre mostrar la barra de info, pero ocultar navegación si solo hay 1 página
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl border border-gray-100 dark:border-gray-700 shadow-lg">
       {/* Info */}
@@ -81,8 +80,9 @@ export function Pagination({
         </div>
       </div>
 
-      {/* Pagination controls */}
-      <div className="flex items-center gap-1">
+      {/* Pagination controls - solo si hay más de 1 página */}
+      {totalPages > 1 && (
+        <div className="flex items-center gap-1">
         {/* First page */}
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -149,6 +149,7 @@ export function Pagination({
           <ChevronsRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
         </motion.button>
       </div>
+      )}
     </div>
   )
 }
