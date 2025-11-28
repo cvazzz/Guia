@@ -22,6 +22,9 @@ GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
 GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 
+# Carpeta específica para archivos LDU
+LDU_DRIVE_FOLDER_ID = os.getenv("LDU_DRIVE_FOLDER_ID", "1XS0zv5Q6oj-Z7nZqyg9a8zcomLhndhjk")
+
 # Supabase Configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")

@@ -15,6 +15,9 @@ from services.supabase_service import get_supabase_service
 from services.drive_service import get_drive_service
 from services.ocr_service import get_ocr_service
 
+# Importar router de LDU
+from api_ldu import router as ldu_router
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +42,9 @@ app.add_middleware(
 supabase_service = None
 drive_service = None
 ocr_service = None
+
+# Incluir router de LDU
+app.include_router(ldu_router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -308,6 +314,153 @@ async def trigger_sync(background_tasks: BackgroundTasks):
     """Dispara sincronización manual con Google Drive."""
     background_tasks.add_task(sync_drive_files)
     return {"message": "Sincronización iniciada en segundo plano"}
+
+
+@app.get("/api/drive/files")
+async def get_drive_files():
+    """Lista todos los archivos TIF en Drive y su estado de procesamiento."""
+    global drive_service, supabase_service
+    
+    try:
+        if not drive_service:
+            drive_service = get_drive_service()
+        
+        # Obtener archivos de Drive
+        drive_files = drive_service.list_tif_files()
+        
+        # Obtener IDs ya procesados de Supabase
+        processed_ids = set()
+        if supabase_service:
+            docs = supabase_service.get_all_documents(limit=1000)
+            processed_ids = {doc['drive_file_id'] for doc in docs}
+        
+        # Clasificar archivos
+        result = {
+            "total": len(drive_files),
+            "processed": 0,
+            "pending": 0,
+            "files": []
+        }
+        
+        for file in drive_files:
+            is_processed = file['id'] in processed_ids
+            if is_processed:
+                result["processed"] += 1
+            else:
+                result["pending"] += 1
+            
+            result["files"].append({
+                "id": file['id'],
+                "name": file['name'],
+                "createdTime": file.get('createdTime'),
+                "webViewLink": file.get('webViewLink'),
+                "processed": is_processed
+            })
+        
+        # Ordenar: pendientes primero
+        result["files"].sort(key=lambda x: (x["processed"], x["name"]))
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error listando archivos de Drive: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@app.post("/api/drive/process")
+async def process_drive_files(
+    background_tasks: BackgroundTasks,
+    file_ids: List[str] = None,
+    count: int = Query(5, ge=1, le=50)
+):
+    """Procesa archivos específicos o una cantidad de archivos pendientes."""
+    global drive_service, supabase_service
+    
+    try:
+        if not drive_service:
+            drive_service = get_drive_service()
+        
+        # Si no se especifican IDs, obtener los pendientes
+        if not file_ids:
+            drive_files = drive_service.list_tif_files()
+            processed_ids = set()
+            if supabase_service:
+                docs = supabase_service.get_all_documents(limit=1000)
+                processed_ids = {doc['drive_file_id'] for doc in docs}
+            
+            # Filtrar solo pendientes
+            pending_files = [f for f in drive_files if f['id'] not in processed_ids]
+            file_ids = [f['id'] for f in pending_files[:count]]
+        
+        if not file_ids:
+            return {"message": "No hay archivos pendientes de procesar", "processed": 0}
+        
+        # Procesar en background
+        background_tasks.add_task(process_specific_files, file_ids)
+        
+        return {
+            "message": f"Procesando {len(file_ids)} archivos en segundo plano",
+            "file_ids": file_ids
+        }
+        
+    except Exception as e:
+        logger.error(f"Error iniciando procesamiento: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+async def process_specific_files(file_ids: List[str]):
+    """Procesa archivos específicos por sus IDs."""
+    global drive_service, ocr_service, supabase_service
+    
+    try:
+        if not drive_service:
+            drive_service = get_drive_service()
+        
+        for file_id in file_ids:
+            try:
+                # Obtener info del archivo
+                file_info = drive_service.get_file_info(file_id)
+                if not file_info:
+                    logger.error(f"No se encontró archivo: {file_id}")
+                    continue
+                
+                # Verificar si ya existe
+                if supabase_service.document_exists(file_id):
+                    logger.info(f"Documento ya existe: {file_info.get('name')}")
+                    continue
+                
+                # Descargar archivo
+                local_path = drive_service.download_file(file_id, file_info.get('name', f'{file_id}.tif'))
+                
+                if local_path:
+                    # Procesar con OCR
+                    ocr_result = ocr_service.process_document(local_path)
+                    
+                    # Preparar datos para Supabase
+                    doc_data = {
+                        'drive_file_id': file_id,
+                        'drive_file_name': file_info.get('name'),
+                        'drive_url': drive_service.get_file_url(file_id),
+                        'drive_embed_url': drive_service.get_file_embed_url(file_id),
+                        **ocr_result
+                    }
+                    
+                    # Guardar en Supabase
+                    supabase_service.save_document(doc_data)
+                    logger.info(f"Procesado: {file_info.get('name')}")
+                    
+                    # Limpiar archivo temporal
+                    if local_path.exists():
+                        local_path.unlink()
+                        
+            except Exception as e:
+                logger.error(f"Error procesando {file_id}: {e}")
+                continue
+        
+        logger.info(f"Procesamiento completado: {len(file_ids)} archivos")
+        
+    except Exception as e:
+        logger.error(f"Error en procesamiento: {e}")
 
 
 async def sync_drive_files():

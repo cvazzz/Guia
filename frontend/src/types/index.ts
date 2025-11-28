@@ -71,3 +71,143 @@ export interface ApiResponse<T> {
   data: T
   error?: string
 }
+
+// ==================== TIPOS LDU ====================
+
+export interface LDURegistro {
+  id: string
+  imei: string
+  modelo: string | null
+  region: string | null
+  punto_venta: string | null
+  nombre_ruta: string | null
+  cobertura_valor: number | null
+  canal: string | null
+  tipo: string | null
+  campo_reg: string | null
+  campo_ok: string | null
+  uso: string | null
+  observaciones: string | null
+  estado: string
+  estado_anterior: string | null
+  responsable_dni: string | null
+  responsable_nombre: string | null
+  responsable_apellido: string | null
+  raw_row: Record<string, any> | null
+  raw_excel_reference: string | null
+  archivo_origen_id: string | null
+  fila_origen: number | null
+  presente_en_ultima_importacion: boolean
+  fecha_ultima_verificacion: string | null
+  fecha_registro: string
+  fecha_actualizacion: string
+  activo: boolean
+}
+
+export interface LDUResponsable {
+  id: string
+  dni: string
+  nombre: string | null
+  apellido: string | null
+  nombre_completo: string | null
+  cargo: string | null
+  estado: string
+  fecha_ingreso: string | null
+  fecha_cese: string | null
+  supervisor_dni: string | null
+  region: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LDUImportacion {
+  id: string
+  archivo_id: string
+  archivo_nombre: string | null
+  total_filas: number
+  insertados: number
+  actualizados: number
+  invalidos: number
+  sin_cambios: number
+  marcados_ausentes: number
+  estado: 'en_proceso' | 'completado' | 'error' | 'cancelado'
+  mensaje_error: string | null
+  fecha_inicio: string
+  fecha_fin: string | null
+  duracion_segundos: number | null
+  usuario_ejecutor: string
+  resumen: Record<string, any> | null
+}
+
+export interface LDUAuditoria {
+  id: string
+  imei: string
+  accion: string
+  usuario_sistema: string
+  fecha_hora: string
+  archivo_origen: string | null
+  fila_numero: number | null
+  modulo_origen: string | null
+  campos_previos: Record<string, any> | null
+  campos_nuevos: Record<string, any> | null
+  raw_row: Record<string, any> | null
+  comentarios: string | null
+  operacion_id: string | null
+  importacion_id: string | null
+}
+
+export interface LDUHistorialResponsable {
+  id: string
+  ldu_imei: string
+  responsable_anterior_dni: string | null
+  responsable_anterior_nombre: string | null
+  responsable_nuevo_dni: string | null
+  responsable_nuevo_nombre: string | null
+  motivo: string
+  comentarios: string | null
+  usuario_cambio: string
+  fecha_cambio: string
+  importacion_id: string | null
+}
+
+export interface LDUImportError {
+  id: string
+  importacion_id: string
+  archivo_id: string
+  fila_numero: number | null
+  tipo_error: string
+  mensaje_error: string
+  raw_row: Record<string, any> | null
+  imei_intentado: string | null
+  fecha_error: string
+}
+
+export interface LDUStats {
+  total: number
+  sin_responsable: number
+  ausentes_ultimo_excel: number
+  por_estado?: Record<string, number>
+  por_region?: Record<string, number>
+}
+
+export interface LDUSearchParams {
+  query?: string
+  imei?: string
+  dni?: string
+  region?: string
+  punto_venta?: string
+  estado?: string
+  responsable?: string
+  presente?: boolean
+  page?: number
+  limit?: number
+}
+
+export interface ExcelFile {
+  id: string
+  name: string
+  mimeType: string
+  modifiedTime: string
+  size: number
+}

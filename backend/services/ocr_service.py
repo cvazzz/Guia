@@ -332,7 +332,9 @@ class OCRService:
             descripcion_parts = []
             unidad = None
             cantidad = None
+            unidad_x = None  # Guardar posición X de la unidad para validar cantidad
             
+            # Primera pasada: identificar código, unidad y sus posiciones
             for d in row:
                 text = d['text'].strip()
                 x_pos = d['x_center']
@@ -343,36 +345,55 @@ class OCRService:
                 # Código alfanumérico solo (acepta O como 0: PROZ070 o PROZO7O)
                 elif re.match(r'^[A-Z]{2,4}[O0\d]{3,6}$', text.upper()) and len(text) <= 10:
                     codigo = text.upper()
-                    # Normalizar todas las O a 0 después de las letras iniciales
                     codigo = self._normalize_code(codigo)
                 # Código concatenado con descripción (ej: "PROZO7O AURICULAR INALÁMBRICO...")
                 elif not codigo:
-                    # Buscar código al inicio del texto (acepta O como dígito, sufijo 3-6 chars)
                     match = re.match(r'^([A-Z]{2,4}[O0\d]{3,6})\s+(.+)', text.upper())
                     if match:
                         codigo = match.group(1)
-                        # Normalizar O a 0
                         codigo = self._normalize_code(codigo)
-                        # El resto es descripción - usar el texto original para preservar mayúsculas/minúsculas
                         code_len = len(match.group(1))
                         rest = text[code_len:].strip()
                         if rest:
                             descripcion_parts.append(rest)
-                        continue  # Ya procesamos este texto
+                        continue
                 
-                # Detectar unidad
+                # Detectar unidad y guardar su posición
                 if text.upper() in ['NIU', 'UND', 'UN', 'PZA', 'KG', 'LT', 'CJ']:
                     unidad = text.upper()
-                # Detectar cantidad (número de 1-3 dígitos)
-                elif re.match(r'^\d{1,3}$', text):
-                    # Si tenemos la posición X de cantidad, verificar cercanía
-                    if cantidad_x and abs(x_pos - cantidad_x) < image_width * 0.1:
-                        cantidad = text
-                    elif not cantidad:  # Si no tenemos posición, guardar el último número
-                        cantidad = text
-                # El resto es descripción (si no es número de fila y no es código ya procesado)
+                    unidad_x = x_pos
+            
+            # Segunda pasada: buscar cantidad (debe estar DESPUÉS de la unidad, en la última columna)
+            for d in row:
+                text = d['text'].strip()
+                x_pos = d['x_center']
+                
+                # Detectar cantidad: número de 1-4 dígitos
+                if re.match(r'^\d{1,4}$', text):
+                    num_val = int(text)
+                    
+                    # La cantidad debe cumplir:
+                    # 1. Estar en el extremo derecho de la fila (última columna)
+                    # 2. Si tenemos unidad_x, debe estar DESPUÉS de la unidad
+                    # 3. Si tenemos cantidad_x de la cabecera, debe estar cerca
+                    
+                    is_rightmost = x_pos > (image_width * 0.75)  # Más del 75% del ancho
+                    is_after_unit = unidad_x is None or x_pos > unidad_x
+                    is_near_cantidad_header = cantidad_x is None or abs(x_pos - cantidad_x) < image_width * 0.15
+                    
+                    # El número de fila (1-9) suele estar muy a la izquierda
+                    is_row_number = x_pos < (image_width * 0.1) and num_val < 10
+                    
+                    if not is_row_number and is_after_unit and (is_rightmost or is_near_cantidad_header):
+                        # Preferir números que estén más a la derecha
+                        if cantidad is None or x_pos > d.get('prev_x', 0):
+                            cantidad = text
+                            d['prev_x'] = x_pos
+                
+                # El resto es descripción (si no es número de fila ni código)
                 elif not re.match(r'^[12345]$', text) and len(text) > 2 and text.upper() != codigo:
-                    descripcion_parts.append(text)
+                    if text.upper() not in ['NIU', 'UND', 'UN', 'PZA', 'KG', 'LT', 'CJ']:
+                        descripcion_parts.append(text)
             
             if codigo and unidad:
                 descripcion = ' '.join(descripcion_parts)
@@ -649,9 +670,10 @@ class OCRService:
             
             # Patrón 0: Código concatenado con descripción (ej: "PROZ070 AURICULAR INALÁMBRICO...")
             # OCR confunde 0 con O, así que aceptamos ambos en posiciones numéricas
-            # Ejemplos: PROZO7O, PROZ070, PROP180, PROPO8O
+            # Formato esperado: CODIGO DESCRIPCION U/M CANTIDAD
+            # La cantidad debe estar al FINAL de la línea, justo después de la unidad
             match = re.search(
-                r'(?:^|\s)(PRO[A-Z][O0\d]{3}|PROP[O0\d]{3}|POP[O0\d]{4}|[A-Z]{3,4}[O0\d]{3,4})([A-ZÁÉÍÓÚ][a-záéíóúA-Z\s]+.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,3})(?:\s|$)',
+                r'(?:^|\s)(PRO[A-Z][O0\d]{3}|PROP[O0\d]{3}|POP[O0\d]{4}|[A-Z]{3,4}[O0\d]{3,4})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,4})\s*$',
                 line, re.IGNORECASE
             )
             
@@ -677,9 +699,9 @@ class OCRService:
                     logger.info(f"    ✓ Producto (concatenado): [{codigo}] {descripcion} | {unidad} x{cantidad}")
                 continue
             
-            # Patrón 1: Código numérico (6-8 dígitos) con cantidad
+            # Patrón 1: Código numérico (6-8 dígitos) con cantidad al final
             match = re.search(
-                r'(?:^|\s)(\d{6,8})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,3})(?:\s|$)',
+                r'(?:^|\s)(\d{6,8})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,4})\s*$',
                 line, re.IGNORECASE
             )
             
@@ -703,10 +725,9 @@ class OCRService:
                     logger.info(f"    ✓ Producto: [{codigo}] {descripcion} | {unidad} x{cantidad}")
                 continue
             
-            # Patrón 2: Código alfanumérico (POP0142, PROZ070, etc.) con cantidad
-            # Acepta O como 0 en cualquier posición del sufijo numérico
+            # Patrón 2: Código alfanumérico (POP0142, PROZ070, etc.) con cantidad al final
             match = re.search(
-                r'(?:^|\s)([A-Z]{2,4}[O0\d]{3,6})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,3})(?:\s|$)',
+                r'(?:^|\s)([A-Z]{2,4}[O0\d]{3,6})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,4})\s*$',
                 line, re.IGNORECASE
             )
             
@@ -732,9 +753,40 @@ class OCRService:
                     logger.info(f"    ✓ Producto: [{codigo}] {descripcion} | {unidad} x{cantidad}")
                 continue
             
-            # Patrón 3: Sin cantidad explícita
+            # Patrón 3: Con número de fila al inicio (1, 2, 3...) seguido de código
+            # Formato: NRO CODIGO DESCRIPCION U/M CANTIDAD
             match = re.search(
-                r'(?:^|\s)(\d{6,8}|[A-Z]{2,4}[O0\d]{3,6})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)(?:\s|$)',
+                r'^(\d{1,2})\s+([A-Z]{2,4}[O0\d]{3,6}|\d{6,8})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s+(\d{1,4})\s*$',
+                line, re.IGNORECASE
+            )
+            
+            if match:
+                # nro_fila = match.group(1)  # Número de fila, no lo usamos
+                codigo = match.group(2)
+                if codigo[0].isalpha():
+                    codigo = codigo.upper()
+                    codigo = self._normalize_code(codigo)
+                
+                descripcion = match.group(3).strip()
+                unidad = match.group(4).upper()
+                cantidad = match.group(5)
+                
+                descripcion = re.sub(r'\s+', ' ', descripcion).strip()
+                
+                if len(descripcion) > 3 and not any(p['codigo'] == codigo for p in productos):
+                    productos.append({
+                        'nro': str(len(productos) + 1),
+                        'codigo': codigo,
+                        'nombre': descripcion,
+                        'unidad': unidad,
+                        'cantidad': cantidad
+                    })
+                    logger.info(f"    ✓ Producto (con nro fila): [{codigo}] {descripcion} | {unidad} x{cantidad}")
+                continue
+            
+            # Patrón 4: Sin cantidad explícita (la cantidad podría no haberse detectado)
+            match = re.search(
+                r'(?:^|\s)(\d{6,8}|[A-Z]{2,4}[O0\d]{3,6})\s+(.+?)\s+(NIU|UND|UN|PZA|KG|LT|CJ)\s*$',
                 line, re.IGNORECASE
             )
             

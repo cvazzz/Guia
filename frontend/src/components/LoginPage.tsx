@@ -9,10 +9,14 @@ import {
   Eye, 
   EyeOff, 
   Loader2, 
-  FileText,
+  Layers,
   Sparkles,
   ArrowRight,
-  CheckCircle
+  CheckCircle,
+  FileText,
+  Smartphone,
+  BarChart3,
+  Shield
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import toast from 'react-hot-toast'
@@ -55,10 +59,10 @@ export function LoginPage() {
   }
 
   const features = [
-    'Procesamiento OCR con IA',
-    'Detección automática de firmas',
-    'Sincronización con Google Drive',
-    'Exportación a Excel y PDF'
+    { text: 'Gestión de Guías de Remisión', icon: <FileText className="w-4 h-4" /> },
+    { text: 'Control de Dispositivos LDU', icon: <Smartphone className="w-4 h-4" /> },
+    { text: 'Sincronización con Google Drive', icon: <BarChart3 className="w-4 h-4" /> },
+    { text: 'Seguridad y Auditoría', icon: <Shield className="w-4 h-4" /> }
   ]
 
   return (
@@ -80,13 +84,13 @@ export function LoginPage() {
             className="flex items-center gap-4 mb-12"
           >
             <div className="p-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/20">
-              <FileText className="w-10 h-10 text-white" />
+              <Layers className="w-10 h-10 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-white">Guías de Remisión</h1>
+              <h1 className="text-3xl font-bold text-white">Sistema de Gestión</h1>
               <div className="flex items-center gap-2 mt-1">
                 <Sparkles className="w-4 h-4 text-amber-300" />
-                <span className="text-blue-100 text-sm">Potenciado con IA</span>
+                <span className="text-blue-100 text-sm">Plataforma Centralizada</span>
               </div>
             </div>
           </motion.div>
@@ -99,10 +103,10 @@ export function LoginPage() {
             className="mb-10"
           >
             <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight mb-4">
-              Gestión Inteligente de Documentos
+              Plataforma de Gestión Empresarial
             </h2>
             <p className="text-blue-100 text-lg">
-              Automatiza el procesamiento de tus guías de remisión con reconocimiento óptico de caracteres y detección de firmas.
+              Centraliza y automatiza la gestión de documentos, dispositivos y recursos desde una única plataforma integrada.
             </p>
           </motion.div>
 
@@ -115,16 +119,16 @@ export function LoginPage() {
           >
             {features.map((feature, index) => (
               <motion.div
-                key={feature}
+                key={feature.text}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 + index * 0.1 }}
                 className="flex items-center gap-3"
               >
-                <div className="p-1 bg-green-400/20 rounded-full">
-                  <CheckCircle className="w-5 h-5 text-green-300" />
+                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <span className="text-white">{feature.icon}</span>
                 </div>
-                <span className="text-white/90">{feature}</span>
+                <span className="text-white/90">{feature.text}</span>
               </motion.div>
             ))}
           </motion.div>
@@ -141,9 +145,9 @@ export function LoginPage() {
           {/* Logo móvil */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
-              <FileText className="w-8 h-8 text-white" />
+              <Layers className="w-8 h-8 text-white" />
             </div>
-            <span className="text-2xl font-bold text-gray-800 dark:text-white">Guías de Remisión</span>
+            <span className="text-2xl font-bold text-gray-800 dark:text-white">Sistema de Gestión</span>
           </div>
 
           <div className="bg-gray-800 rounded-3xl shadow-2xl p-8 border border-gray-700">

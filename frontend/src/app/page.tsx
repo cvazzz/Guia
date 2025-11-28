@@ -1,494 +1,432 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { 
-  Search, 
-  Filter, 
   FileText, 
-  Calendar, 
-  Package, 
-  CheckCircle, 
-  XCircle,
-  RefreshCw,
-  ChevronDown,
-  X,
-  TrendingUp,
+  Smartphone, 
+  BarChart3, 
+  Settings,
+  ChevronRight,
   Users,
-  AlertCircle,
-  BarChart3,
-  Download,
-  PanelLeftOpen,
-  CheckSquare,
-  Square
+  Package,
+  Activity,
+  TrendingUp,
+  Shield,
+  Clock,
+  ArrowUpRight,
+  Layers,
+  LogOut
 } from 'lucide-react'
-import { SearchFilters } from '@/components/SearchFilters'
-import { DocumentCard } from '@/components/DocumentCard'
-import { DocumentViewer } from '@/components/DocumentViewer'
-import { StatsCards } from '@/components/StatsCards'
-import { Header } from '@/components/Header'
-import { LoginPage } from '@/components/LoginPage'
-import { AnalyticsDashboard } from '@/components/AnalyticsDashboard'
-import { ExportModal } from '@/components/ExportModal'
-import { Sidebar } from '@/components/Sidebar'
-import { Pagination } from '@/components/Pagination'
-import { SelectionToolbar } from '@/components/SelectionToolbar'
-import { EditDocumentModal } from '@/components/EditDocumentModal'
-import { NotificationCenter } from '@/components/NotificationCenter'
-import { useDocuments } from '@/hooks/useDocuments'
-import { useStats } from '@/hooks/useStats'
 import { useAuth } from '@/contexts/AuthContext'
-import { Documento, SearchParams } from '@/types'
-import toast from 'react-hot-toast'
+import { LoginPage } from '@/components/LoginPage'
 
-export default function Home() {
-  const [selectedDocument, setSelectedDocument] = useState<Documento | null>(null)
-  const [showFilters, setShowFilters] = useState(false)
-  const [searchParams, setSearchParams] = useState<SearchParams>({})
-  const [showAnalytics, setShowAnalytics] = useState(false)
-  const [showExport, setShowExport] = useState(false)
-  const [showSidebar, setShowSidebar] = useState(false)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [editingDocument, setEditingDocument] = useState<Documento | null>(null)
-  const [newDocsCount, setNewDocsCount] = useState(0)
-  
-  // Paginación
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(12)
-  
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
-  
-  const { 
-    documents, 
-    loading, 
-    error, 
-    refetch,
-    searchDocuments 
-  } = useDocuments()
-  
-  const { stats, loading: statsLoading } = useStats()
+interface Module {
+  id: string
+  title: string
+  description: string
+  icon: React.ReactNode
+  color: string
+  gradient: string
+  href: string
+  stats?: {
+    label: string
+    value: string | number
+  }[]
+  status: 'active' | 'coming-soon' | 'beta'
+  features: string[]
+}
 
-  // Calcular documentos paginados
-  const paginatedDocuments = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    const endIndex = startIndex + itemsPerPage
-    return documents.slice(startIndex, endIndex)
-  }, [documents, currentPage, itemsPerPage])
+const modules: Module[] = [
+  {
+    id: 'guias',
+    title: 'Guías de Remisión',
+    description: 'Gestión integral de documentos de transporte, OCR automático y seguimiento de entregas',
+    icon: <FileText className="w-8 h-8" />,
+    color: 'from-blue-500 to-blue-600',
+    gradient: 'bg-gradient-to-br from-blue-500/10 to-blue-600/10',
+    href: '/guias',
+    status: 'active',
+    features: ['OCR Automático', 'Sincronización Drive', 'Búsqueda Avanzada', 'Exportación PDF/Excel']
+  },
+  {
+    id: 'ldu',
+    title: 'Gestión LDU',
+    description: 'Control y seguimiento de dispositivos móviles, asignaciones y responsables',
+    icon: <Smartphone className="w-8 h-8" />,
+    color: 'from-emerald-500 to-emerald-600',
+    gradient: 'bg-gradient-to-br from-emerald-500/10 to-emerald-600/10',
+    href: '/ldu',
+    status: 'active',
+    features: ['Importación Excel', 'Normalización IMEI', 'Historial Cambios', 'Reportes']
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics & Reportes',
+    description: 'Dashboards interactivos, métricas en tiempo real y generación de informes',
+    icon: <BarChart3 className="w-8 h-8" />,
+    color: 'from-purple-500 to-purple-600',
+    gradient: 'bg-gradient-to-br from-purple-500/10 to-purple-600/10',
+    href: '/analytics',
+    status: 'coming-soon',
+    features: ['KPIs en Tiempo Real', 'Gráficos Interactivos', 'Exportación Automática', 'Alertas']
+  },
+  {
+    id: 'admin',
+    title: 'Administración',
+    description: 'Configuración del sistema, usuarios, permisos y auditoría',
+    icon: <Settings className="w-8 h-8" />,
+    color: 'from-gray-500 to-gray-600',
+    gradient: 'bg-gradient-to-br from-gray-500/10 to-gray-600/10',
+    href: '/admin',
+    status: 'coming-soon',
+    features: ['Gestión Usuarios', 'Roles y Permisos', 'Logs de Auditoría', 'Configuración']
+  }
+]
 
-  const totalPages = Math.ceil(documents.length / itemsPerPage)
+export default function HomePage() {
+  const router = useRouter()
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth()
+  const [stats, setStats] = useState({
+    totalGuias: 0,
+    totalLDU: 0,
+    pendientes: 0,
+    ultimaSync: null as string | null
+  })
 
-  // Reset página cuando cambian los documentos
   useEffect(() => {
-    setCurrentPage(1)
-  }, [documents.length])
+    if (isAuthenticated) {
+      fetchStats()
+    }
+  }, [isAuthenticated])
 
-  const handleSearch = async (params: SearchParams) => {
-    setSearchParams(params)
-    setCurrentPage(1) // Reset a primera página al buscar
-    await searchDocuments(params)
-  }
-
-  const handleQuickFilter = async (filter: { firmado?: boolean; fecha_desde?: string }) => {
-    setShowFilters(true)
-    setCurrentPage(1)
-    await searchDocuments(filter)
-    toast.success('Filtro aplicado')
-  }
-
-  const handleRefresh = async () => {
-    toast.promise(
-      refetch(),
-      {
-        loading: 'Actualizando documentos...',
-        success: 'Documentos actualizados',
-        error: 'Error al actualizar'
+  const fetchStats = async () => {
+    try {
+      // Cargar estadísticas reales desde la API
+      const [guiasRes, lduRes] = await Promise.allSettled([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/stats`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/ldu/stats`)
+      ])
+      
+      let totalGuias = 0
+      let pendientes = 0
+      let totalLDU = 0
+      
+      if (guiasRes.status === 'fulfilled' && guiasRes.value.ok) {
+        const guiasData = await guiasRes.value.json()
+        totalGuias = guiasData.total || 0
+        pendientes = guiasData.pendientes || 0
       }
-    )
-  }
-
-  const handleViewDocument = (doc: Documento) => {
-    setSelectedDocument(doc)
-  }
-
-  const handleCloseViewer = () => {
-    setSelectedDocument(null)
-  }
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const handleItemsPerPageChange = (items: number) => {
-    setItemsPerPage(items)
-    setCurrentPage(1)
-  }
-
-  // Funciones de selección
-  const handleToggleSelect = (docId: number) => {
-    setSelectedIds(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(docId)) {
-        newSet.delete(docId)
-      } else {
-        newSet.add(docId)
+      
+      if (lduRes.status === 'fulfilled' && lduRes.value.ok) {
+        const lduData = await lduRes.value.json()
+        totalLDU = lduData.total_registros || 0
       }
-      // Activar modo selección si hay seleccionados
-      if (newSet.size > 0) {
-        setSelectionMode(true)
-      }
-      return newSet
-    })
-  }
-
-  const handleSelectAll = () => {
-    if (selectedIds.size === documents.length) {
-      // Deseleccionar todos
-      setSelectedIds(new Set())
-      setSelectionMode(false)
-    } else {
-      // Seleccionar todos
-      setSelectedIds(new Set(documents.map(d => d.id)))
+      
+      setStats({
+        totalGuias,
+        totalLDU,
+        pendientes,
+        ultimaSync: new Date().toISOString()
+      })
+    } catch (error) {
+      console.error('Error loading stats:', error)
     }
   }
 
-  const handleClearSelection = () => {
-    setSelectedIds(new Set())
-    setSelectionMode(false)
-  }
-
-  const selectedDocuments = useMemo(() => {
-    return documents.filter(d => selectedIds.has(d.id))
-  }, [documents, selectedIds])
-
-  // Handler para actualizar documento después de editar
-  const handleDocumentSave = (updatedDoc: Documento) => {
-    refetch() // Refrescar la lista
-    setEditingDocument(null)
-  }
-
-  // Mostrar loading mientras verifica autenticación
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-100/50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Cargando...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Cargando sistema...</p>
+        </motion.div>
       </div>
     )
   }
 
-  // Si no está autenticado, mostrar login
   if (!isAuthenticated) {
     return <LoginPage />
   }
 
+  const handleModuleClick = (module: Module) => {
+    if (module.status === 'coming-soon') {
+      return
+    }
+    router.push(module.href)
+  }
+
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Buenos días'
+    if (hour < 18) return 'Buenas tardes'
+    return 'Buenas noches'
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-100/50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 pattern-bg transition-colors duration-300 dark:text-white">
-      {/* Sidebar */}
-      <Sidebar 
-        documents={documents}
-        isOpen={showSidebar}
-        onToggle={() => setShowSidebar(!showSidebar)}
-        onQuickFilter={handleQuickFilter}
-      />
-
-      <Header 
-        onRefresh={handleRefresh} 
-        onOpenAnalytics={() => setShowAnalytics(true)}
-        onOpenExport={() => setShowExport(true)}
-      />
-      
-      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 transition-all duration-300 ${showSidebar ? 'lg:ml-80' : ''}`}>
-        {/* Botones de acceso rápido */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-wrap gap-3"
-        >
-          <button
-            onClick={() => setShowSidebar(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all border border-gray-200 dark:border-gray-700"
-          >
-            <PanelLeftOpen className="w-4 h-4" />
-            Panel de Control
-          </button>
-          <button
-            onClick={() => setShowAnalytics(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-          >
-            <BarChart3 className="w-4 h-4" />
-            Dashboard Analítico
-          </button>
-          <button
-            onClick={() => setShowExport(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-          >
-            <Download className="w-4 h-4" />
-            Exportar Datos
-          </button>
-          <NotificationCenter onNewDocumentsFound={setNewDocsCount} />
-          <button
-            onClick={() => {
-              setSelectionMode(!selectionMode)
-              if (selectionMode) {
-                setSelectedIds(new Set())
-              }
-            }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all ${
-              selectionMode 
-                ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-            }`}
-          >
-            {selectionMode ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-            {selectionMode ? 'Cancelar Selección' : 'Seleccionar'}
-          </button>
-        </motion.div>
-
-        {/* Stats Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <StatsCards stats={stats} loading={statsLoading} />
-        </motion.div>
-
-        {/* Search Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <div className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl p-6 md:p-8 border border-white/50 dark:border-gray-700 overflow-visible relative z-40">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+      {/* Header */}
+      <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                <Layers className="w-6 h-6 text-white" />
+              </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
-                  <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
-                    <Search className="w-5 h-5 text-white" />
-                  </div>
-                  Buscar Documentos
-                </h2>
-                <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 ml-12">
-                  Encuentra guías por fecha, producto, proveedor y más
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Sistema de Gestión
+                </h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Plataforma Centralizada
                 </p>
               </div>
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl ${
-                  showFilters 
-                    ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700' 
-                    : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-                <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showFilters ? 'rotate-180' : ''}`} />
-              </button>
             </div>
             
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="overflow-visible relative z-50"
-                >
-                  <SearchFilters onSearch={handleSearch} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="flex items-center gap-4">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {user?.email?.split('@')[0] || 'Usuario'}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {user?.email}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                {user?.email?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <button
+                onClick={logout}
+                className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           </div>
-        </motion.div>
+        </div>
+      </header>
 
-        {/* Documents Grid */}
-        <motion.div
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Section */}
+        <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl">
-                  <FileText className="w-5 h-5 text-white" />
-                </div>
-                Documentos
-                {documents.length > 0 && (
-                  <span className="text-sm font-normal text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-3 py-1 rounded-full ml-2">
-                    {documents.length} encontrados
-                  </span>
-                )}
-              </h2>
-            </div>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleRefresh}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-xl transition-all duration-300 font-medium"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              Actualizar
-            </motion.button>
-          </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            {getGreeting()}, {user?.email?.split('@')[0] || 'Usuario'} 👋
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Selecciona un módulo para comenzar a trabajar
+          </p>
+        </motion.div>
 
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <motion.div 
-                  key={i} 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white/50 dark:border-gray-700/50"
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-xl shimmer"></div>
+        {/* Quick Stats */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalGuias}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Total Guías</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                <Smartphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalLDU}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Dispositivos LDU</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pendientes}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Pendientes</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                <Activity className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">99.9%</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Uptime</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Modules Grid */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mb-8"
+        >
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Módulos Disponibles
+          </h3>
+          <div className="grid md:grid-cols-2 gap-6">
+            {modules.map((module, index) => (
+              <motion.div
+                key={module.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * (index + 1) }}
+                whileHover={module.status !== 'coming-soon' ? { scale: 1.02 } : {}}
+                whileTap={module.status !== 'coming-soon' ? { scale: 0.98 } : {}}
+                onClick={() => handleModuleClick(module)}
+                className={`
+                  relative overflow-hidden rounded-2xl border transition-all duration-300
+                  ${module.status === 'coming-soon' 
+                    ? 'bg-gray-100 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-60'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-pointer hover:shadow-xl hover:border-blue-300 dark:hover:border-blue-600'
+                  }
+                `}
+              >
+                {/* Background Gradient */}
+                <div className={`absolute inset-0 opacity-50 ${module.gradient}`} />
+                
+                {/* Status Badge */}
+                {module.status !== 'active' && (
+                  <div className="absolute top-4 right-4">
+                    <span className={`
+                      px-3 py-1 rounded-full text-xs font-medium
+                      ${module.status === 'beta' 
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      }
+                    `}>
+                      {module.status === 'beta' ? 'Beta' : 'Próximamente'}
+                    </span>
+                  </div>
+                )}
+
+                <div className="relative p-6">
+                  <div className="flex items-start gap-4">
+                    {/* Icon */}
+                    <div className={`
+                      w-14 h-14 rounded-xl flex items-center justify-center text-white shadow-lg
+                      bg-gradient-to-br ${module.color}
+                    `}>
+                      {module.icon}
+                    </div>
+                    
+                    {/* Content */}
                     <div className="flex-1">
-                      <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg w-3/4 mb-2 shimmer"></div>
-                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2 shimmer"></div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                          {module.title}
+                        </h4>
+                        {module.status === 'active' && (
+                          <ArrowUpRight className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 mb-4">
+                        {module.description}
+                      </p>
+                      
+                      {/* Features */}
+                      <div className="flex flex-wrap gap-2">
+                        {module.features.map((feature, i) => (
+                          <span 
+                            key={i}
+                            className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-md text-xs text-gray-600 dark:text-gray-400"
+                          >
+                            {feature}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-3 shimmer"></div>
-                  <div className="flex gap-2 mb-4">
-                    <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-full w-20 shimmer"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-full w-24 shimmer"></div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Recent Activity */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Actividad Reciente
+          </h3>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {[
+                { action: 'Nuevo documento procesado', module: 'Guías', time: 'Hace 5 min', icon: <FileText className="w-4 h-4" />, color: 'text-blue-500' },
+                { action: 'Sincronización completada', module: 'LDU', time: 'Hace 15 min', icon: <Smartphone className="w-4 h-4" />, color: 'text-emerald-500' },
+                { action: '12 registros actualizados', module: 'Sistema', time: 'Hace 1 hora', icon: <Activity className="w-4 h-4" />, color: 'text-purple-500' },
+                { action: 'Exportación generada', module: 'Guías', time: 'Hace 2 horas', icon: <TrendingUp className="w-4 h-4" />, color: 'text-amber-500' },
+              ].map((activity, i) => (
+                <div key={i} className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <div className={`w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center ${activity.color}`}>
+                    {activity.icon}
                   </div>
-                  <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded-xl w-full shimmer"></div>
-                </motion.div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {activity.action}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {activity.module}
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {activity.time}
+                  </span>
+                </div>
               ))}
             </div>
-          ) : error ? (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center"
-            >
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="w-8 h-8 text-red-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-red-700 mb-2">Error al cargar documentos</h3>
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={handleRefresh}
-                className="px-6 py-2.5 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors font-medium"
-              >
-                Reintentar
-              </button>
-            </motion.div>
-          ) : documents.length === 0 ? (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl p-12 text-center shadow-lg border border-white/50 dark:border-gray-700/50"
-            >
-              <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="w-10 h-10 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-600 dark:text-gray-300 mb-2">No hay documentos</h3>
-              <p className="text-gray-400 max-w-md mx-auto">
-                Los documentos aparecerán aquí cuando se procesen desde Google Drive. 
-                Haz clic en Sincronizar para buscar nuevos documentos.
-              </p>
-            </motion.div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <AnimatePresence mode="popLayout">
-                  {paginatedDocuments.map((doc, index) => (
-                    <motion.div
-                      key={doc.id}
-                      layout
-                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.3, delay: index * 0.05 }}
-                    >
-                      <DocumentCard 
-                        document={doc} 
-                        onView={() => handleViewDocument(doc)}
-                        onEdit={() => setEditingDocument(doc)}
-                        isSelected={selectedIds.has(doc.id)}
-                        onToggleSelect={() => handleToggleSelect(doc.id)}
-                        selectionMode={selectionMode}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Paginación */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={documents.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={handlePageChange}
-                onItemsPerPageChange={handleItemsPerPageChange}
-              />
-            </>
-          )}
+          </div>
         </motion.div>
-      </div>
+      </main>
 
-      {/* Document Viewer Modal */}
-      <AnimatePresence>
-        {selectedDocument && (
-          <DocumentViewer 
-            document={selectedDocument} 
-            onClose={handleCloseViewer}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Analytics Dashboard Modal */}
-      <AnimatePresence>
-        {showAnalytics && (
-          <AnalyticsDashboard
-            documents={documents}
-            isOpen={showAnalytics}
-            onClose={() => setShowAnalytics(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Export Modal */}
-      <AnimatePresence>
-        {showExport && (
-          <ExportModal
-            documents={documents}
-            isOpen={showExport}
-            onClose={() => setShowExport(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Selection Toolbar */}
-      <SelectionToolbar
-        selectedDocuments={selectedDocuments}
-        totalDocuments={documents.length}
-        onClearSelection={handleClearSelection}
-        onSelectAll={handleSelectAll}
-        isAllSelected={selectedIds.size === documents.length && documents.length > 0}
-      />
-
-      {/* Edit Document Modal */}
-      <AnimatePresence>
-        {editingDocument && (
-          <EditDocumentModal
-            document={editingDocument}
-            isOpen={!!editingDocument}
-            onClose={() => setEditingDocument(null)}
-            onSave={handleDocumentSave}
-          />
-        )}
-      </AnimatePresence>
-    </main>
+      {/* Footer */}
+      <footer className="mt-12 py-6 border-t border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-800/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Sistema de Gestión Centralizada v1.0
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Sistema operativo
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }

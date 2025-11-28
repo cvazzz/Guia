@@ -25,25 +25,28 @@ import {
   Eye,
   Sun,
   Moon,
-  BarChart3
+  BarChart3,
+  CheckCheck,
+  Loader2
 } from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
+import toast from 'react-hot-toast'
+
+interface PendingFile {
+  id: string
+  numero_guia: string
+  fecha_documento: string
+  proveedor: string
+  created_at: string
+}
 
 interface HeaderProps {
   onRefresh: () => void
   onOpenAnalytics?: () => void
   onOpenExport?: () => void
-}
-
-interface Notification {
-  id: string
-  type: 'success' | 'warning' | 'info'
-  title: string
-  message: string
-  time: string
-  read: boolean
 }
 
 export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps) {
@@ -54,38 +57,87 @@ export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps
   const notifRef = useRef<HTMLDivElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
   
+  // Estados para notificaciones reales
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
+  const [checking, setChecking] = useState(false)
+  const [autoSync, setAutoSync] = useState(true)
+  const [lastCheck, setLastCheck] = useState<Date | null>(null)
+  
   const { theme, toggleTheme } = useTheme()
   const { user, logout } = useAuth()
 
-  // Notificaciones de ejemplo (en producción vendrían de una API)
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'success',
-      title: 'Sincronización completada',
-      message: '10 documentos nuevos procesados',
-      time: 'Hace 5 min',
-      read: false
-    },
-    {
-      id: '2',
-      type: 'warning',
-      title: 'Documento pendiente',
-      message: 'TT01-001674 sin firma detectada',
-      time: 'Hace 1 hora',
-      read: false
-    },
-    {
-      id: '3',
-      type: 'info',
-      title: 'Actualización disponible',
-      message: 'Nueva versión del OCR disponible',
-      time: 'Hace 2 horas',
-      read: true
-    }
-  ])
+  // Función para verificar documentos no revisados
+  const checkNewDocuments = useCallback(async () => {
+    setChecking(true)
+    try {
+      const { data, error } = await supabase
+        .from('documentos_guia')
+        .select('id, numero_guia, fecha_documento, proveedor, created_at')
+        .or('revisado.is.null,revisado.eq.false')
+        .order('created_at', { ascending: false })
+        .limit(20)
 
-  const unreadCount = notifications.filter(n => !n.read).length
+      if (error) throw error
+
+      setPendingFiles(data || [])
+      setLastCheck(new Date())
+    } catch (error) {
+      console.error('Error checking documents:', error)
+    } finally {
+      setChecking(false)
+    }
+  }, [])
+
+  // Marcar un documento como revisado
+  const markAsReviewed = async (fileId: string) => {
+    try {
+      const { error } = await supabase
+        .from('documentos_guia')
+        .update({ revisado: true })
+        .eq('id', fileId)
+
+      if (error) throw error
+
+      setPendingFiles(prev => prev.filter(f => f.id !== fileId))
+      toast.success('Documento marcado como revisado')
+    } catch (error) {
+      console.error('Error marking as reviewed:', error)
+      toast.error('Error al marcar como revisado')
+    }
+  }
+
+  // Marcar todos como revisados
+  const markAllAsReviewed = async () => {
+    if (pendingFiles.length === 0) return
+    
+    try {
+      const ids = pendingFiles.map(f => f.id)
+      const { error } = await supabase
+        .from('documentos_guia')
+        .update({ revisado: true })
+        .in('id', ids)
+
+      if (error) throw error
+
+      setPendingFiles([])
+      toast.success('Todos los documentos marcados como revisados')
+    } catch (error) {
+      console.error('Error marking all as reviewed:', error)
+      toast.error('Error al marcar todos como revisados')
+    }
+  }
+
+  // Auto-sync cada 5 minutos
+  useEffect(() => {
+    checkNewDocuments()
+    
+    if (autoSync) {
+      const interval = setInterval(checkNewDocuments, 5 * 60 * 1000)
+      return () => clearInterval(interval)
+    }
+  }, [autoSync, checkNewDocuments])
+
+  const unreadCount = pendingFiles.length
 
   // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
@@ -104,23 +156,23 @@ export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps
   const handleRefresh = async () => {
     setIsRefreshing(true)
     await onRefresh()
+    await checkNewDocuments()
     setTimeout(() => setIsRefreshing(false), 1000)
   }
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  }
-
-  const clearNotifications = () => {
-    setNotifications([])
-  }
-
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'success': return <CheckCircle className="w-5 h-5 text-green-500" />
-      case 'warning': return <AlertTriangle className="w-5 h-5 text-amber-500" />
-      default: return <Bell className="w-5 h-5 text-blue-500" />
-    }
+  // Formatear tiempo relativo
+  const formatRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    
+    if (diffMins < 1) return 'Ahora'
+    if (diffMins < 60) return `Hace ${diffMins} min`
+    if (diffHours < 24) return `Hace ${diffHours}h`
+    return `Hace ${diffDays}d`
   }
 
   const settingsOptions: Array<{
@@ -150,11 +202,11 @@ export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps
     <motion.header
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden"
+      className="relative z-50"
     >
       {/* Fondo con gradiente animado */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700"></div>
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 overflow-hidden"></div>
+      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30 overflow-hidden"></div>
       
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 md:h-24">
@@ -206,7 +258,7 @@ export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                    {unreadCount}
+                    {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </motion.button>
@@ -217,73 +269,118 @@ export function Header({ onRefresh, onOpenAnalytics, onOpenExport }: HeaderProps
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50"
+                    className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-[9999]"
                   >
-                    <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                    {/* Header del panel */}
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                          <Bell className="w-4 h-4 text-indigo-600" />
-                          Notificaciones
+                        <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                          <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                          Documentos Pendientes
+                          {pendingFiles.length > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-xs font-medium rounded-full">
+                              {pendingFiles.length}
+                            </span>
+                          )}
                         </h3>
                         <div className="flex gap-1">
-                          {notifications.length > 0 && (
-                            <>
-                              <button 
-                                onClick={markAllAsRead}
-                                className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                title="Marcar todo como leído"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={clearNotifications}
-                                className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Limpiar todo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
+                          <button 
+                            onClick={checkNewDocuments}
+                            disabled={checking}
+                            className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Verificar nuevos"
+                          >
+                            {checking ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-4 h-4" />
+                            )}
+                          </button>
+                          {pendingFiles.length > 0 && (
+                            <button 
+                              onClick={markAllAsReviewed}
+                              className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-lg transition-colors"
+                              title="Marcar todos como revisados"
+                            >
+                              <CheckCheck className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
                       </div>
+                      {lastCheck && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Última verificación: {lastCheck.toLocaleTimeString()}
+                        </p>
+                      )}
                     </div>
                     
+                    {/* Lista de documentos pendientes */}
                     <div className="max-h-80 overflow-y-auto">
-                      {notifications.length === 0 ? (
+                      {pendingFiles.length === 0 ? (
                         <div className="p-8 text-center">
-                          <Bell className="w-12 h-12 text-gray-200 mx-auto mb-2" />
-                          <p className="text-gray-400 text-sm">No hay notificaciones</p>
+                          <CheckCircle className="w-12 h-12 text-green-300 dark:text-green-600 mx-auto mb-2" />
+                          <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">¡Todo al día!</p>
+                          <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">No hay documentos pendientes de revisar</p>
                         </div>
                       ) : (
-                        notifications.map((notif, index) => (
+                        pendingFiles.map((file, index) => (
                           <motion.div
-                            key={notif.id}
+                            key={file.id}
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            className={`p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors ${
-                              !notif.read ? 'bg-blue-50/50' : ''
-                            }`}
+                            transition={{ delay: index * 0.03 }}
+                            className="p-3 border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
                           >
-                            <div className="flex gap-3">
-                              <div className="flex-shrink-0 mt-0.5">
-                                {getNotificationIcon(notif.type)}
+                            <div className="flex items-center gap-3">
+                              <div className="flex-shrink-0">
+                                <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg">
+                                  <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                </div>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-800">{notif.title}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">{notif.message}</p>
-                                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">
+                                  {file.numero_guia || 'Sin número'}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                  {file.proveedor || 'Sin proveedor'}
+                                </p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  {notif.time}
+                                  {formatRelativeTime(file.created_at)}
                                 </p>
                               </div>
-                              {!notif.read && (
-                                <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
-                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  markAsReviewed(file.id)
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-lg transition-all"
+                                title="Marcar como revisado"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
                             </div>
                           </motion.div>
                         ))
                       )}
+                    </div>
+
+                    {/* Footer con auto-sync */}
+                    <div className="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Auto-sincronización</span>
+                        <button
+                          onClick={() => setAutoSync(!autoSync)}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${
+                            autoSync ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        >
+                          <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                            autoSync ? 'translate-x-5' : ''
+                          }`} />
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 )}

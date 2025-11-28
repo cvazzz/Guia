@@ -318,3 +318,6 @@ CREATE POLICY "Permitir lectura pública" ON documentos_guia
 CREATE POLICY "Permitir escritura desde servicio" ON documentos_guia
     FOR ALL USING (true);
 """
+
+# Crear instancia singleton del servicio
+supabase_service = SupabaseService()

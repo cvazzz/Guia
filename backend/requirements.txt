@@ -21,6 +21,11 @@ numpy
 # Base de datos
 supabase
 
+# Procesamiento de Excel
+pandas
+openpyxl
+xlrd
+
 # Utilidades
 python-dotenv
 requests
