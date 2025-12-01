@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { AlertTriangle } from 'lucide-react';
 import ConflictsModal from './ConflictsModal';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
@@ -46,7 +46,7 @@ export default function ConflictsBadge({ onResolve }: ConflictsBadgeProps) {
         onClick={() => setShowModal(true)}
         className="relative flex items-center gap-2 px-3 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
       >
-        <ExclamationTriangleIcon className="h-5 w-5" />
+        <AlertTriangle className="h-5 w-5" />
         <span className="text-sm font-medium">
           {count} conflicto{count !== 1 ? 's' : ''} pendiente{count !== 1 ? 's' : ''}
         </span>
