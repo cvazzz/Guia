@@ -459,7 +459,9 @@ async def get_registro(imei: str):
 @router.put("/registros/{imei}")
 async def update_registro(imei: str, request: UpdateRegistroRequest):
     """
-    Actualiza un registro LDU y opcionalmente sincroniza con Google Sheets
+    Actualiza un registro LDU y opcionalmente sincroniza con Google Sheets.
+    Marca los campos editados como 'editados manualmente' para protegerlos
+    de ser sobrescritos en futuras importaciones.
     """
     try:
         # Obtener registro actual
@@ -469,6 +471,7 @@ async def update_registro(imei: str, request: UpdateRegistroRequest):
         
         # Construir datos de actualización (solo campos no-None)
         update_data = {}
+        edited_fields = []  # Campos que fueron editados manualmente
         update_fields = [
             'modelo', 'account', 'account_int', 'supervisor', 'zone', 
             'departamento', 'city', 'canal', 'tipo', 'punto_venta', 
@@ -480,7 +483,11 @@ async def update_registro(imei: str, request: UpdateRegistroRequest):
         for field in update_fields:
             value = getattr(request, field, None)
             if value is not None:
-                update_data[field] = value
+                # Verificar si realmente cambió
+                old_value = existing.get(field)
+                if str(value).strip() != str(old_value or '').strip():
+                    update_data[field] = value
+                    edited_fields.append(field)
         
         if not update_data:
             return {
@@ -491,6 +498,21 @@ async def update_registro(imei: str, request: UpdateRegistroRequest):
         
         # Actualizar timestamp
         update_data['fecha_actualizacion'] = datetime.now().isoformat()
+        
+        # Marcar campos como editados manualmente
+        if edited_fields:
+            current_manual_fields = existing.get('campos_editados_manualmente', []) or []
+            if isinstance(current_manual_fields, str):
+                try:
+                    current_manual_fields = json.loads(current_manual_fields)
+                except:
+                    current_manual_fields = []
+            
+            # Agregar nuevos campos editados (sin duplicados)
+            all_manual_fields = list(set(current_manual_fields + edited_fields))
+            update_data['campos_editados_manualmente'] = all_manual_fields
+            update_data['fecha_ultima_edicion_manual'] = datetime.now().isoformat()
+            update_data['usuario_ultima_edicion'] = request.user
         
         # Actualizar en base de datos
         result = ldu_sync_service.supabase.table('ldu_registros').update(
@@ -925,6 +947,319 @@ async def get_ausentes_excel():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== ENDPOINTS DE CONFLICTOS ====================
+
+class ResolveConflictRequest(BaseModel):
+    accion: str = Field(..., description="'mantener' para conservar valor actual, 'sobrescribir' para usar valor del Excel")
+    user: str = Field(default="system", description="Usuario que resuelve el conflicto")
+
+
+class ResolveAllConflictsRequest(BaseModel):
+    accion: str = Field(..., description="'mantener' o 'sobrescribir' para todos los conflictos")
+    imei: Optional[str] = Field(None, description="Opcional: resolver solo conflictos de un IMEI específico")
+    user: str = Field(default="system", description="Usuario que resuelve los conflictos")
+
+
+@router.get("/conflictos")
+async def get_conflictos(
+    estado: str = Query(default="pendiente", description="Estado de los conflictos: pendiente, resuelto_mantener, resuelto_sobrescribir"),
+    imei: Optional[str] = Query(default=None, description="Filtrar por IMEI específico"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200)
+):
+    """
+    Obtiene lista de conflictos entre ediciones manuales y datos de Excel
+    """
+    try:
+        query = ldu_sync_service.supabase.table('ldu_conflictos').select(
+            '*, ldu_registros(modelo, responsable_nombre, responsable_apellido, punto_venta, region)'
+        )
+        
+        if estado:
+            query = query.eq('estado', estado)
+        
+        if imei:
+            query = query.eq('imei', imei)
+        
+        # Ordenar por fecha de conflicto (más recientes primero)
+        query = query.order('fecha_conflicto', desc=True)
+        
+        # Paginación
+        offset = (page - 1) * limit
+        query = query.range(offset, offset + limit - 1)
+        
+        result = query.execute()
+        
+        # Contar total
+        count_query = ldu_sync_service.supabase.table('ldu_conflictos').select('id', count='exact')
+        if estado:
+            count_query = count_query.eq('estado', estado)
+        if imei:
+            count_query = count_query.eq('imei', imei)
+        count_result = count_query.execute()
+        
+        return {
+            "success": True,
+            "data": result.data,
+            "total": count_result.count if count_result.count else len(result.data),
+            "page": page,
+            "limit": limit
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/conflictos/resumen")
+async def get_conflictos_resumen():
+    """
+    Obtiene resumen de conflictos pendientes
+    """
+    try:
+        # Contar conflictos pendientes
+        pendientes = ldu_sync_service.supabase.table('ldu_conflictos').select(
+            'id', count='exact'
+        ).eq('estado', 'pendiente').execute()
+        
+        # Contar por campo
+        campos = ldu_sync_service.supabase.table('ldu_conflictos').select(
+            'campo'
+        ).eq('estado', 'pendiente').execute()
+        
+        campos_conteo = {}
+        for c in campos.data:
+            campo = c.get('campo', 'unknown')
+            campos_conteo[campo] = campos_conteo.get(campo, 0) + 1
+        
+        # Obtener IMEIs únicos afectados
+        imeis = ldu_sync_service.supabase.table('ldu_conflictos').select(
+            'imei'
+        ).eq('estado', 'pendiente').execute()
+        
+        imeis_unicos = list(set([c.get('imei') for c in imeis.data]))
+        
+        return {
+            "success": True,
+            "data": {
+                "total_pendientes": pendientes.count or 0,
+                "registros_afectados": len(imeis_unicos),
+                "conflictos_por_campo": campos_conteo
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/conflictos/{conflicto_id}/resolver")
+async def resolver_conflicto(conflicto_id: str, request: ResolveConflictRequest):
+    """
+    Resuelve un conflicto individual.
+    - 'mantener': Conserva el valor editado manualmente
+    - 'sobrescribir': Aplica el valor del Excel
+    """
+    try:
+        # Obtener conflicto
+        conflicto = ldu_sync_service.supabase.table('ldu_conflictos').select('*').eq(
+            'id', conflicto_id
+        ).eq('estado', 'pendiente').execute()
+        
+        if not conflicto.data:
+            raise HTTPException(status_code=404, detail="Conflicto no encontrado o ya resuelto")
+        
+        c = conflicto.data[0]
+        imei = c['imei']
+        campo = c['campo']
+        valor_excel = c['valor_excel']
+        valor_actual = c['valor_actual']
+        
+        if request.accion == 'sobrescribir':
+            # Aplicar valor del Excel
+            ldu_sync_service.supabase.table('ldu_registros').update({
+                campo: valor_excel,
+                'fecha_actualizacion': datetime.now().isoformat()
+            }).eq('imei', imei).execute()
+            
+            # Quitar campo de la lista de editados manualmente
+            registro = ldu_sync_service.supabase.table('ldu_registros').select(
+                'campos_editados_manualmente'
+            ).eq('imei', imei).execute()
+            
+            if registro.data:
+                campos_manuales = registro.data[0].get('campos_editados_manualmente', []) or []
+                if isinstance(campos_manuales, str):
+                    try:
+                        campos_manuales = json.loads(campos_manuales)
+                    except:
+                        campos_manuales = []
+                
+                if campo in campos_manuales:
+                    campos_manuales.remove(campo)
+                    ldu_sync_service.supabase.table('ldu_registros').update({
+                        'campos_editados_manualmente': campos_manuales
+                    }).eq('imei', imei).execute()
+            
+            valor_final = valor_excel
+            estado_final = 'resuelto_sobrescribir'
+        else:
+            # Mantener valor actual
+            valor_final = valor_actual
+            estado_final = 'resuelto_mantener'
+        
+        # Actualizar conflicto
+        ldu_sync_service.supabase.table('ldu_conflictos').update({
+            'estado': estado_final,
+            'resuelto_por': request.user,
+            'fecha_resolucion': datetime.now().isoformat(),
+            'valor_final': valor_final
+        }).eq('id', conflicto_id).execute()
+        
+        return {
+            "success": True,
+            "message": f"Conflicto resuelto: {estado_final}",
+            "data": {
+                "imei": imei,
+                "campo": campo,
+                "valor_final": valor_final,
+                "accion": request.accion
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/conflictos/resolver-todos")
+async def resolver_todos_conflictos(request: ResolveAllConflictsRequest):
+    """
+    Resuelve todos los conflictos pendientes con la misma acción.
+    Opcionalmente puede filtrar por IMEI.
+    """
+    try:
+        # Obtener conflictos pendientes
+        query = ldu_sync_service.supabase.table('ldu_conflictos').select('*').eq('estado', 'pendiente')
+        
+        if request.imei:
+            query = query.eq('imei', request.imei)
+        
+        conflictos = query.execute()
+        
+        if not conflictos.data:
+            return {
+                "success": True,
+                "message": "No hay conflictos pendientes",
+                "resueltos": 0
+            }
+        
+        resueltos = 0
+        errores = 0
+        
+        for c in conflictos.data:
+            try:
+                imei = c['imei']
+                campo = c['campo']
+                valor_excel = c['valor_excel']
+                valor_actual = c['valor_actual']
+                
+                if request.accion == 'sobrescribir':
+                    # Aplicar valor del Excel
+                    ldu_sync_service.supabase.table('ldu_registros').update({
+                        campo: valor_excel,
+                        'fecha_actualizacion': datetime.now().isoformat()
+                    }).eq('imei', imei).execute()
+                    
+                    # Quitar campo de la lista de editados manualmente
+                    registro = ldu_sync_service.supabase.table('ldu_registros').select(
+                        'campos_editados_manualmente'
+                    ).eq('imei', imei).execute()
+                    
+                    if registro.data:
+                        campos_manuales = registro.data[0].get('campos_editados_manualmente', []) or []
+                        if isinstance(campos_manuales, str):
+                            try:
+                                campos_manuales = json.loads(campos_manuales)
+                            except:
+                                campos_manuales = []
+                        
+                        if campo in campos_manuales:
+                            campos_manuales.remove(campo)
+                            ldu_sync_service.supabase.table('ldu_registros').update({
+                                'campos_editados_manualmente': campos_manuales
+                            }).eq('imei', imei).execute()
+                    
+                    valor_final = valor_excel
+                    estado_final = 'resuelto_sobrescribir'
+                else:
+                    valor_final = valor_actual
+                    estado_final = 'resuelto_mantener'
+                
+                # Actualizar conflicto
+                ldu_sync_service.supabase.table('ldu_conflictos').update({
+                    'estado': estado_final,
+                    'resuelto_por': request.user,
+                    'fecha_resolucion': datetime.now().isoformat(),
+                    'valor_final': valor_final
+                }).eq('id', c['id']).execute()
+                
+                resueltos += 1
+            except Exception as e:
+                print(f"Error resolviendo conflicto {c['id']}: {e}")
+                errores += 1
+        
+        return {
+            "success": True,
+            "message": f"Resueltos {resueltos} conflictos" + (f" ({errores} errores)" if errores else ""),
+            "resueltos": resueltos,
+            "errores": errores
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/conflictos/{imei}/desproteger-campo")
+async def desproteger_campo(imei: str, campo: str = Query(..., description="Campo a desproteger")):
+    """
+    Quita un campo de la lista de 'editados manualmente', 
+    permitiendo que sea actualizado en futuras importaciones.
+    """
+    try:
+        registro = ldu_sync_service.supabase.table('ldu_registros').select(
+            'campos_editados_manualmente'
+        ).eq('imei', imei).execute()
+        
+        if not registro.data:
+            raise HTTPException(status_code=404, detail=f"Registro con IMEI {imei} no encontrado")
+        
+        campos_manuales = registro.data[0].get('campos_editados_manualmente', []) or []
+        if isinstance(campos_manuales, str):
+            try:
+                campos_manuales = json.loads(campos_manuales)
+            except:
+                campos_manuales = []
+        
+        if campo in campos_manuales:
+            campos_manuales.remove(campo)
+            ldu_sync_service.supabase.table('ldu_registros').update({
+                'campos_editados_manualmente': campos_manuales
+            }).eq('imei', imei).execute()
+            
+            return {
+                "success": True,
+                "message": f"Campo '{campo}' desprotegido para IMEI {imei}",
+                "campos_protegidos": campos_manuales
+            }
+        else:
+            return {
+                "success": True,
+                "message": f"Campo '{campo}' no estaba protegido",
+                "campos_protegidos": campos_manuales
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/reportes/danados")

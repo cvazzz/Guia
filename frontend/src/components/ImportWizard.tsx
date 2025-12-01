@@ -785,7 +785,34 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
                     </p>
                     <p className="text-sm text-gray-500/70">Sin cambios</p>
                   </div>
+                  {/* Mostrar conflictos si los hay */}
+                  {importResult.conflictos > 0 && (
+                    <div className="p-4 bg-orange-50 dark:bg-orange-900/30 rounded-xl border-2 border-orange-300 dark:border-orange-600">
+                      <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">
+                        {importResult.conflictos}
+                      </p>
+                      <p className="text-sm text-orange-600/70">Conflictos</p>
+                    </div>
+                  )}
                 </div>
+
+                {/* Aviso de conflictos */}
+                {importResult.conflictos > 0 && (
+                  <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl mb-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-orange-800 dark:text-orange-200">
+                          Se detectaron {importResult.conflictos} conflictos con ediciones manuales
+                        </p>
+                        <p className="text-sm text-orange-600 dark:text-orange-400 mt-1">
+                          Los campos editados manualmente fueron protegidos. Revise los conflictos 
+                          pendientes para decidir si mantener sus cambios o usar los valores del Excel.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {importResult.errores && importResult.errores.length > 0 && (
                   <div className="text-left mb-6">

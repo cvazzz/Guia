@@ -82,7 +82,8 @@ class LDUSyncService:
                 records=normalized['valid_records'],
                 importacion_id=importacion_id,
                 file_id=file_id,
-                user=user
+                user=user,
+                file_name=file_info.get('name')
             )
             
             # Marcar registros ausentes
@@ -216,7 +217,8 @@ class LDUSyncService:
                 user=user,
                 drive_file_id=drive_file_id,
                 drive_sheet_name=drive_sheet_name,
-                drive_row_start=drive_row_start
+                drive_row_start=drive_row_start,
+                file_name=drive_file_name or source_name
             )
             
             # Marcar registros ausentes
@@ -234,6 +236,7 @@ class LDUSyncService:
             stats = normalized.get('stats', {})
             skipped = stats.get('skipped', 0)  # Filas vacías
             sin_imei = stats.get('sin_imei', 0)  # Filas sin IMEI pero con datos
+            conflicts = sync_result.get('conflicts', 0)  # Conflictos con ediciones manuales
             
             # Preparar resumen (incluye todos los detalles)
             resumen = {
@@ -243,6 +246,7 @@ class LDUSyncService:
                 'sin_cambios': sync_result['unchanged'],
                 'filas_omitidas': skipped,  # Filas vacías omitidas
                 'sin_imei': sin_imei,  # Registros sin IMEI (con ID generado)
+                'conflictos': conflicts,  # Conflictos con ediciones manuales
                 'marcados_ausentes': absent_count,
                 'archivo_nombre': source_name,
                 'fecha_ingestion': start_time.isoformat(),
@@ -282,10 +286,12 @@ class LDUSyncService:
         user: str,
         drive_file_id: Optional[str] = None,
         drive_sheet_name: Optional[str] = None,
-        drive_row_start: int = 2
+        drive_row_start: int = 2,
+        file_name: str = None
     ) -> Dict[str, int]:
         """
         Sincroniza registros con la base de datos (insert/update)
+        Detecta conflictos con campos editados manualmente y los registra
         
         Args:
             records: Lista de registros normalizados
@@ -295,6 +301,7 @@ class LDUSyncService:
             drive_file_id: ID del archivo en Google Sheets (para sync bidireccional)
             drive_sheet_name: Nombre de la hoja en Google Sheets
             drive_row_start: Fila inicial de datos en la hoja (default 2, primera es header)
+            file_name: Nombre del archivo para referencia en conflictos
             
         Returns:
             Dict con contadores de operaciones
@@ -302,6 +309,7 @@ class LDUSyncService:
         inserted = 0
         updated = 0
         unchanged = 0
+        conflicts_count = 0
         
         for idx, record_data in enumerate(records):
             record = record_data['record']
@@ -322,35 +330,56 @@ class LDUSyncService:
                     # UPDATE - verificar si hay cambios
                     existing_record = existing.data[0]
                     
-                    # Comparar campos relevantes
-                    has_changes = self._has_changes(existing_record, record)
+                    # Detectar campos editados manualmente
+                    manual_fields = self._get_manual_edited_fields(existing_record)
+                    
+                    # Detectar conflictos con campos manuales
+                    conflicts = self._detect_conflicts(
+                        existing_record, 
+                        record, 
+                        importacion_id,
+                        file_name=file_name or file_id,
+                        row_number=record.get('fila_origen')
+                    )
+                    
+                    if conflicts:
+                        # Registrar conflictos para resolución posterior
+                        self._register_conflicts(conflicts)
+                        conflicts_count += len(conflicts)
+                    
+                    # Filtrar registro para no sobrescribir campos manuales
+                    filtered_record = self._filter_record_for_update(record, manual_fields)
+                    
+                    # Comparar campos relevantes (solo los que no están protegidos)
+                    has_changes = self._has_changes(existing_record, filtered_record)
                     
                     if has_changes:
                         # Guardar estado anterior
                         campos_previos = {
                             k: existing_record.get(k) 
-                            for k in record.keys() 
+                            for k in filtered_record.keys() 
                             if k in existing_record
                         }
                         
-                        # Verificar cambio de responsable
-                        if existing_record.get('responsable_dni') != record.get('responsable_dni'):
-                            await self._register_responsable_change(
-                                imei=imei,
-                                anterior_dni=existing_record.get('responsable_dni'),
-                                anterior_nombre=f"{existing_record.get('responsable_nombre', '')} {existing_record.get('responsable_apellido', '')}".strip(),
-                                nuevo_dni=record.get('responsable_dni'),
-                                nuevo_nombre=f"{record.get('responsable_nombre', '')} {record.get('responsable_apellido', '')}".strip(),
-                                motivo='importacion',
-                                user=user,
-                                importacion_id=importacion_id
-                            )
+                        # Verificar cambio de responsable (solo si no está protegido)
+                        if 'responsable_dni' not in manual_fields:
+                            if existing_record.get('responsable_dni') != filtered_record.get('responsable_dni'):
+                                await self._register_responsable_change(
+                                    imei=imei,
+                                    anterior_dni=existing_record.get('responsable_dni'),
+                                    anterior_nombre=f"{existing_record.get('responsable_nombre', '')} {existing_record.get('responsable_apellido', '')}".strip(),
+                                    nuevo_dni=filtered_record.get('responsable_dni'),
+                                    nuevo_nombre=f"{filtered_record.get('responsable_nombre', '')} {filtered_record.get('responsable_apellido', '')}".strip(),
+                                    motivo='importacion',
+                                    user=user,
+                                    importacion_id=importacion_id
+                                )
                         
-                        # Actualizar registro
-                        record['presente_en_ultima_importacion'] = True
-                        record['fecha_ultima_verificacion'] = datetime.now().isoformat()
+                        # Actualizar registro (con campos filtrados)
+                        filtered_record['presente_en_ultima_importacion'] = True
+                        filtered_record['fecha_ultima_verificacion'] = datetime.now().isoformat()
                         
-                        self.supabase.table('ldu_registros').update(record).eq('imei', imei).execute()
+                        self.supabase.table('ldu_registros').update(filtered_record).eq('imei', imei).execute()
                         
                         # Registrar auditoría
                         self._register_audit(
@@ -360,9 +389,10 @@ class LDUSyncService:
                             archivo_origen=file_id,
                             fila_numero=record.get('fila_origen'),
                             campos_previos=campos_previos,
-                            campos_nuevos=record,
+                            campos_nuevos=filtered_record,
                             raw_row=record.get('raw_row'),
-                            importacion_id=importacion_id
+                            importacion_id=importacion_id,
+                            campos_protegidos=manual_fields if manual_fields else None
                         )
                         
                         updated += 1
@@ -421,18 +451,21 @@ class LDUSyncService:
         return {
             'inserted': inserted,
             'updated': updated,
-            'unchanged': unchanged
+            'unchanged': unchanged,
+            'conflicts': conflicts_count
         }
+    
+    # Campos que se comparan para detectar cambios
+    COMPARE_FIELDS = [
+        'modelo', 'region', 'punto_venta', 'nombre_ruta', 'cobertura_valor',
+        'canal', 'tipo', 'campo_reg', 'campo_ok', 'uso', 'observaciones',
+        'estado', 'responsable_dni', 'responsable_nombre', 'responsable_apellido',
+        'account', 'account_int', 'supervisor', 'zone', 'departamento', 'city'
+    ]
     
     def _has_changes(self, existing: Dict, new: Dict) -> bool:
         """Compara si hay cambios significativos entre registros"""
-        compare_fields = [
-            'modelo', 'region', 'punto_venta', 'nombre_ruta', 'cobertura_valor',
-            'canal', 'tipo', 'campo_reg', 'campo_ok', 'uso', 'observaciones',
-            'estado', 'responsable_dni', 'responsable_nombre', 'responsable_apellido'
-        ]
-        
-        for field in compare_fields:
+        for field in self.COMPARE_FIELDS:
             old_val = existing.get(field)
             new_val = new.get(field)
             
@@ -447,6 +480,92 @@ class LDUSyncService:
         
         return False
     
+    def _get_manual_edited_fields(self, existing: Dict) -> List[str]:
+        """Obtiene la lista de campos editados manualmente"""
+        campos = existing.get('campos_editados_manualmente', [])
+        if isinstance(campos, str):
+            try:
+                campos = json.loads(campos)
+            except:
+                campos = []
+        return campos if isinstance(campos, list) else []
+    
+    def _detect_conflicts(
+        self, 
+        existing: Dict, 
+        new: Dict, 
+        importacion_id: str,
+        file_name: str = None,
+        row_number: int = None
+    ) -> List[Dict]:
+        """
+        Detecta conflictos entre datos del Excel y campos editados manualmente
+        
+        Returns:
+            Lista de conflictos detectados
+        """
+        conflicts = []
+        manual_fields = self._get_manual_edited_fields(existing)
+        
+        if not manual_fields:
+            return conflicts
+        
+        for field in manual_fields:
+            if field not in self.COMPARE_FIELDS:
+                continue
+                
+            old_val = existing.get(field) or ''
+            new_val = new.get(field) or ''
+            
+            if str(old_val).strip() != str(new_val).strip():
+                conflicts.append({
+                    'imei': existing.get('imei'),
+                    'importacion_id': importacion_id,
+                    'campo': field,
+                    'valor_actual': str(old_val).strip(),
+                    'valor_excel': str(new_val).strip(),
+                    'fecha_edicion_manual': existing.get('fecha_ultima_edicion_manual'),
+                    'usuario_edicion': existing.get('usuario_ultima_edicion'),
+                    'archivo_origen': file_name,
+                    'fila_origen': row_number,
+                    'estado': 'pendiente'
+                })
+        
+        return conflicts
+    
+    def _register_conflicts(self, conflicts: List[Dict]) -> int:
+        """Registra conflictos en la base de datos"""
+        if not conflicts:
+            return 0
+        
+        try:
+            self.supabase.table('ldu_conflictos').insert(conflicts).execute()
+            return len(conflicts)
+        except Exception as e:
+            print(f"Error registrando conflictos: {e}")
+            return 0
+    
+    def _filter_record_for_update(self, record: Dict, manual_fields: List[str]) -> Dict:
+        """
+        Filtra el registro para no sobrescribir campos editados manualmente
+        
+        Args:
+            record: Registro con todos los campos del Excel
+            manual_fields: Lista de campos editados manualmente
+            
+        Returns:
+            Registro filtrado sin los campos protegidos
+        """
+        if not manual_fields:
+            return record
+        
+        filtered = {}
+        for key, value in record.items():
+            if key not in manual_fields:
+                filtered[key] = value
+        
+        return filtered
+
     async def _mark_absent_records(
         self,
         current_imeis: List[str],
@@ -548,7 +667,8 @@ class LDUSyncService:
         campos_nuevos: Optional[Dict],
         raw_row: Optional[Dict],
         importacion_id: Optional[str] = None,
-        comentarios: Optional[str] = None
+        comentarios: Optional[str] = None,
+        campos_protegidos: Optional[List[str]] = None
     ):
         """Registra evento de auditoría"""
         try:
@@ -559,6 +679,11 @@ class LDUSyncService:
                 campos_previos = self._clean_for_json(campos_previos)
             if campos_nuevos:
                 campos_nuevos = self._clean_for_json(campos_nuevos)
+            
+            # Agregar info de campos protegidos al comentario si existen
+            if campos_protegidos:
+                protegidos_info = f"Campos protegidos (no actualizados): {', '.join(campos_protegidos)}"
+                comentarios = f"{comentarios}. {protegidos_info}" if comentarios else protegidos_info
             
             self.supabase.table('ldu_auditoria').insert({
                 'imei': imei,

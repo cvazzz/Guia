@@ -38,6 +38,7 @@ import toast from 'react-hot-toast'
 import { LDURegistro, LDUStats, LDUSearchParams, ExcelFile } from '@/types'
 import { ImportWizard } from '@/components/ImportWizard'
 import { Tooltip } from '@/components/Tooltip'
+import ConflictsBadge from '@/components/ConflictsBadge'
 import Link from 'next/link'
 
 // Componente de tarjeta de estadísticas
@@ -1183,7 +1184,10 @@ export default function LDUPage() {
                 <p className="text-indigo-100">Control y seguimiento de dispositivos</p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 items-center">
+              {/* Badge de conflictos */}
+              <ConflictsBadge onResolve={loadData} />
+              
               <button
                 onClick={() => setShowImportModal(true)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/20"
