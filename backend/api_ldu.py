@@ -55,6 +55,33 @@ class ReasignacionMasivaRequest(BaseModel):
     user: str = Field(default="system", description="Usuario que realiza la operación")
 
 
+class UpdateRegistroRequest(BaseModel):
+    """Modelo para actualizar un registro LDU"""
+    modelo: Optional[str] = None
+    account: Optional[str] = None
+    account_int: Optional[str] = None
+    supervisor: Optional[str] = None
+    zone: Optional[str] = None
+    departamento: Optional[str] = None
+    city: Optional[str] = None
+    canal: Optional[str] = None
+    tipo: Optional[str] = None
+    punto_venta: Optional[str] = None
+    nombre_ruta: Optional[str] = None
+    cobertura_valor: Optional[float] = None
+    campo_reg: Optional[str] = None
+    campo_ok: Optional[str] = None
+    uso: Optional[str] = None
+    observaciones: Optional[str] = None
+    estado: Optional[str] = None
+    responsable_dni: Optional[str] = None
+    responsable_nombre: Optional[str] = None
+    responsable_apellido: Optional[str] = None
+    region: Optional[str] = None
+    sync_to_drive: bool = Field(default=True, description="Sincronizar cambios a Google Sheets")
+    user: str = Field(default="system", description="Usuario que realiza la operación")
+
+
 # ==================== ENDPOINTS DE IMPORTACIÓN ====================
 
 @router.post("/import")
@@ -191,7 +218,7 @@ async def import_local_excel(
 ):
     """
     Importa un archivo Excel desde el escritorio a Supabase
-    Opcionalmente sincroniza a Google Drive
+    Opcionalmente sincroniza a Google Drive como Google Sheets para edición bidireccional
     """
     try:
         # Validar extensión
@@ -222,31 +249,55 @@ async def import_local_excel(
         # Renombrar columnas según mapeo
         df = df.rename(columns=mapping)
         
-        # Ejecutar sincronización
-        result = await ldu_sync_service.sync_from_dataframe(
-            df=df,
-            source_name=file.filename,
-            user=user
-        )
+        # Log para debug: mostrar columnas y una fila de ejemplo
+        import logging
+        logging.warning(f"DEBUG MAPPING - Mapeo recibido: {mapping}")
+        logging.warning(f"DEBUG MAPPING - Columnas después del mapeo: {list(df.columns)}")
+        if len(df) > 0:
+            first_row = df.iloc[0].to_dict()
+            logging.warning(f"DEBUG MAPPING - Primera fila: {first_row}")
         
-        # Opcionalmente subir a Drive
+        drive_file_id = None
+        drive_file_name = None
+        
+        # Subir a Drive PRIMERO (como Google Sheets para edición bidireccional)
         if sync_to_drive.lower() == 'true':
             try:
-                # Guardar temporalmente y subir
+                # Preparar Excel para subida
                 output = io.BytesIO()
                 df.to_excel(output, index=False)
                 output.seek(0)
                 
-                drive_file = excel_drive_service.upload_file(
+                # Subir y convertir a Google Sheets
+                drive_file = excel_drive_service.upload_and_convert_to_sheets(
                     file_content=output.getvalue(),
-                    filename=f"LDU_Import_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    filename=file.filename
                 )
-                result['drive_file_id'] = drive_file.get('id')
-                result['synced_to_drive'] = True
+                drive_file_id = drive_file.get('id')
+                drive_file_name = drive_file.get('name')
+                
             except Exception as drive_error:
-                result['drive_sync_error'] = str(drive_error)
-                result['synced_to_drive'] = False
+                print(f"Error subiendo a Drive: {drive_error}")
+                # Continuar sin Drive si falla
+        
+        # Ejecutar sincronización con referencia a Drive
+        result = await ldu_sync_service.sync_from_dataframe(
+            df=df,
+            source_name=file.filename,
+            user=user,
+            drive_file_id=drive_file_id,
+            drive_file_name=drive_file_name
+        )
+        
+        if drive_file_id:
+            result['drive_file_id'] = drive_file_id
+            result['drive_file_name'] = drive_file_name
+            result['synced_to_drive'] = True
+            result['drive_url'] = f"https://docs.google.com/spreadsheets/d/{drive_file_id}"
+        else:
+            result['synced_to_drive'] = sync_to_drive.lower() == 'true'
+            if result['synced_to_drive']:
+                result['drive_sync_error'] = "No se pudo subir a Drive"
         
         return {
             "success": True,
@@ -399,6 +450,141 @@ async def get_registro(imei: str):
             "success": True,
             "data": result
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/registros/{imei}")
+async def update_registro(imei: str, request: UpdateRegistroRequest):
+    """
+    Actualiza un registro LDU y opcionalmente sincroniza con Google Sheets
+    """
+    try:
+        # Obtener registro actual
+        existing = ldu_sync_service.get_ldu_by_imei(imei)
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"LDU con IMEI {imei} no encontrado")
+        
+        # Construir datos de actualización (solo campos no-None)
+        update_data = {}
+        update_fields = [
+            'modelo', 'account', 'account_int', 'supervisor', 'zone', 
+            'departamento', 'city', 'canal', 'tipo', 'punto_venta', 
+            'nombre_ruta', 'cobertura_valor', 'campo_reg', 'campo_ok', 
+            'uso', 'observaciones', 'estado', 'responsable_dni', 
+            'responsable_nombre', 'responsable_apellido', 'region'
+        ]
+        
+        for field in update_fields:
+            value = getattr(request, field, None)
+            if value is not None:
+                update_data[field] = value
+        
+        if not update_data:
+            return {
+                "success": True,
+                "message": "No hay cambios para aplicar",
+                "data": existing
+            }
+        
+        # Actualizar timestamp
+        update_data['fecha_actualizacion'] = datetime.now().isoformat()
+        
+        # Actualizar en base de datos
+        result = ldu_sync_service.supabase.table('ldu_registros').update(
+            update_data
+        ).eq('imei', imei).execute()
+        
+        updated_record = result.data[0] if result.data else None
+        drive_synced = False
+        
+        # Sincronizar con Google Sheets si está habilitado
+        if request.sync_to_drive and updated_record:
+            drive_file_id = existing.get('drive_file_id')
+            drive_sheet_name = existing.get('drive_sheet_name', 'Sheet1')
+            drive_row_index = existing.get('drive_row_index')
+            
+            if drive_file_id and drive_row_index:
+                try:
+                    # Obtener mapeo dinámico de columnas desde el header del Sheet
+                    header_to_column = excel_drive_service.get_column_letters(
+                        spreadsheet_id=drive_file_id,
+                        sheet_name=drive_sheet_name
+                    )
+                    
+                    # Mapeo de campos de DB a nombres de columnas del Excel
+                    db_to_excel_header = {
+                        'imei': 'IMEI',
+                        'modelo': 'MODEL',
+                        'account': 'Account',
+                        'account_int': 'Account_int',
+                        'responsable_dni': 'DNI',
+                        'responsable_nombre': 'First_Name',
+                        'responsable_apellido': 'Last_Name',
+                        'supervisor': 'Supervisor',
+                        'zone': 'Zone',
+                        'departamento': 'Departamento',
+                        'city': 'City',
+                        'canal': 'Canal',
+                        'tipo': 'Tipo',
+                        'punto_venta': 'POS_vv',
+                        'nombre_ruta': 'Name_Ruta',
+                        'cobertura_valor': 'HC_Real',
+                        'campo_reg': 'REG',
+                        'campo_ok': 'OK',
+                        'uso': 'USO',
+                        'observaciones': 'OBSERVATION',
+                        'estado': 'Estado',
+                        'region': 'Region'
+                    }
+                    
+                    # Actualizar cada celda modificada
+                    for field, value in update_data.items():
+                        if field in db_to_excel_header and field != 'fecha_actualizacion':
+                            excel_header = db_to_excel_header[field]
+                            # Buscar la columna correspondiente (case-insensitive)
+                            col = None
+                            for header, col_letter in header_to_column.items():
+                                if header.lower() == excel_header.lower():
+                                    col = col_letter
+                                    break
+                            
+                            if col:
+                                excel_drive_service.update_sheet_cell(
+                                    spreadsheet_id=drive_file_id,
+                                    sheet_name=drive_sheet_name,
+                                    row=drive_row_index,
+                                    column=col,
+                                    value=str(value) if value is not None else ''
+                                )
+                    
+                    drive_synced = True
+                except Exception as drive_error:
+                    # Log error pero no fallar la operación
+                    print(f"Error sincronizando con Drive: {drive_error}")
+        
+        # Registrar auditoría
+        ldu_sync_service._register_audit(
+            imei=imei,
+            accion='update_manual',
+            user=request.user,
+            archivo_origen='api_update',
+            fila_numero=None,
+            campos_previos={k: existing.get(k) for k in update_data.keys()},
+            campos_nuevos=update_data,
+            raw_row=None,
+            importacion_id=None
+        )
+        
+        return {
+            "success": True,
+            "message": "Registro actualizado correctamente",
+            "data": updated_record,
+            "drive_synced": drive_synced
+        }
+        
     except HTTPException:
         raise
     except Exception as e:

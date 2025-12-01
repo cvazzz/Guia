@@ -103,10 +103,10 @@ export default function HomePage() {
 
   const fetchStats = async () => {
     try {
-      // Cargar estadísticas reales desde la API
+      // Cargar estadísticas reales desde la API (usando proxy de Next.js)
       const [guiasRes, lduRes] = await Promise.allSettled([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/stats`),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/ldu/stats`)
+        fetch('/api/stats'),
+        fetch('/api/ldu/stats')
       ])
       
       let totalGuias = 0

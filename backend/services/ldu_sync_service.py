@@ -143,7 +143,11 @@ class LDUSyncService:
         self,
         df,  # pandas DataFrame
         source_name: str = "local_upload",
-        user: str = "system"
+        user: str = "system",
+        drive_file_id: str = None,
+        drive_file_name: str = None,
+        drive_sheet_name: str = 'Sheet1',
+        drive_row_start: int = 2
     ) -> Dict[str, Any]:
         """
         Ejecuta sincronización desde un DataFrame de pandas (archivo local)
@@ -152,6 +156,8 @@ class LDUSyncService:
             df: DataFrame con los datos del Excel
             source_name: Nombre del archivo origen
             user: Usuario que ejecuta la operación
+            drive_file_id: ID del archivo en Google Drive (para sync bidireccional)
+            drive_file_name: Nombre del archivo en Drive
             
         Returns:
             Dict con resumen del proceso
@@ -162,8 +168,8 @@ class LDUSyncService:
         # Crear registro de importación
         importacion = {
             'id': importacion_id,
-            'archivo_id': f'local_{source_name}',
-            'archivo_nombre': source_name,
+            'archivo_id': drive_file_id or f'local_{source_name}',
+            'archivo_nombre': drive_file_name or source_name,
             'estado': 'en_proceso',
             'usuario_ejecutor': user,
             'fecha_inicio': start_time.isoformat()
@@ -173,8 +179,13 @@ class LDUSyncService:
             # Insertar registro de importación
             self.supabase.table('ldu_importaciones').insert(importacion).execute()
             
-            # Convertir DataFrame a lista de diccionarios
-            data = df.fillna('').to_dict('records')
+            # Convertir DataFrame a lista de diccionarios con índice de fila
+            data = []
+            for idx, row in df.fillna('').iterrows():
+                row_dict = row.to_dict()
+                row_dict['_row_number'] = idx + 2  # +2 porque idx es 0-based y fila 1 es header
+                row_dict['_raw_row'] = row_dict.copy()
+                data.append(row_dict)
             
             if not data:
                 raise Exception("El archivo está vacío o no tiene datos válidos")
@@ -202,7 +213,10 @@ class LDUSyncService:
                 records=normalized['valid_records'],
                 importacion_id=importacion_id,
                 file_id=f'local_{source_name}',
-                user=user
+                user=user,
+                drive_file_id=drive_file_id,
+                drive_sheet_name=drive_sheet_name,
+                drive_row_start=drive_row_start
             )
             
             # Marcar registros ausentes
@@ -216,32 +230,36 @@ class LDUSyncService:
             end_time = datetime.now()
             duration = int((end_time - start_time).total_seconds())
             
-            # Preparar resumen
+            # Obtener estadísticas
+            stats = normalized.get('stats', {})
+            skipped = stats.get('skipped', 0)  # Filas vacías
+            sin_imei = stats.get('sin_imei', 0)  # Filas sin IMEI pero con datos
+            
+            # Preparar resumen (incluye todos los detalles)
             resumen = {
                 'total_filas': len(data),
                 'insertados': sync_result['inserted'],
                 'actualizados': sync_result['updated'],
                 'sin_cambios': sync_result['unchanged'],
-                'invalidos': len(normalized['errors']),
+                'filas_omitidas': skipped,  # Filas vacías omitidas
+                'sin_imei': sin_imei,  # Registros sin IMEI (con ID generado)
                 'marcados_ausentes': absent_count,
-                'errores': normalized['errors'][:10],
                 'archivo_nombre': source_name,
                 'fecha_ingestion': start_time.isoformat(),
                 'duracion_segundos': duration
             }
             
-            # Actualizar registro de importación
+            # Actualizar registro de importación (solo columnas que existen en la tabla)
             self.supabase.table('ldu_importaciones').update({
                 'estado': 'completado',
                 'total_filas': len(data),
                 'insertados': sync_result['inserted'],
                 'actualizados': sync_result['updated'],
                 'sin_cambios': sync_result['unchanged'],
-                'invalidos': len(normalized['errors']),
                 'marcados_ausentes': absent_count,
                 'fecha_fin': end_time.isoformat(),
                 'duracion_segundos': duration,
-                'resumen': resumen
+                'resumen': resumen  # El resumen JSONB tiene todos los detalles extra
             }).eq('id', importacion_id).execute()
             
             return resumen
@@ -261,7 +279,10 @@ class LDUSyncService:
         records: List[Dict[str, Any]],
         importacion_id: str,
         file_id: str,
-        user: str
+        user: str,
+        drive_file_id: Optional[str] = None,
+        drive_sheet_name: Optional[str] = None,
+        drive_row_start: int = 2
     ) -> Dict[str, int]:
         """
         Sincroniza registros con la base de datos (insert/update)
@@ -271,6 +292,9 @@ class LDUSyncService:
             importacion_id: ID de la importación actual
             file_id: ID del archivo origen
             user: Usuario ejecutor
+            drive_file_id: ID del archivo en Google Sheets (para sync bidireccional)
+            drive_sheet_name: Nombre de la hoja en Google Sheets
+            drive_row_start: Fila inicial de datos en la hoja (default 2, primera es header)
             
         Returns:
             Dict con contadores de operaciones
@@ -279,10 +303,16 @@ class LDUSyncService:
         updated = 0
         unchanged = 0
         
-        for record_data in records:
+        for idx, record_data in enumerate(records):
             record = record_data['record']
             imei = record_data['imei']
             warnings = record_data.get('warnings', [])
+            
+            # Calcular fila en Drive si hay sync bidireccional
+            if drive_file_id:
+                record['drive_file_id'] = drive_file_id
+                record['drive_sheet_name'] = drive_sheet_name or 'Sheet1'
+                record['drive_row_index'] = drive_row_start + idx
             
             try:
                 # Buscar registro existente

@@ -3,6 +3,7 @@ Servicio de normalización y validación para registros LDU
 Implementa todas las reglas de transformación y validación del Excel
 """
 import re
+import time
 from typing import Dict, Any, Optional, Tuple, List
 from datetime import datetime
 
@@ -10,7 +11,7 @@ from datetime import datetime
 class LDUNormalizationService:
     """Servicio de normalización de datos LDU"""
     
-    # Patrones para detectar estado desde OBSERVATION
+    # Patrones para detectar estado desde Observation
     ESTADO_PATTERNS = {
         'Activo': [
             r'PUNTO\s*DE\s*VENTA',
@@ -60,36 +61,117 @@ class LDUNormalizationService:
         ]
     }
     
-    def validate_imei(self, imei: Any) -> Tuple[bool, str, Optional[str]]:
+    def _is_empty_row(self, row: Dict[str, Any]) -> bool:
+        """
+        Verifica si una fila está completamente vacía (sin datos útiles)
+        
+        Args:
+            row: Diccionario con los datos de la fila
+            
+        Returns:
+            True si la fila no tiene datos útiles, False si tiene al menos un dato
+        """
+        # Campos relevantes a verificar (excluir campos internos)
+        relevant_fields = [
+            'Account', 'Account_int', 'Supervisor', 'Zone', 'Departamento', 'City',
+            'Canal', 'Tipo', 'POS_vv', 'Name_Ruta', 'HC_Real',
+            'DNI', 'First_Name', 'Last_Name', 'MODEL', 'OBSERVATION',
+            'REG', 'OK', 'USO'
+        ]
+        
+        for field in relevant_fields:
+            value = row.get(field)
+            if value is not None:
+                value_str = str(value).strip().lower()
+                if value_str and value_str not in ['nan', 'none', 'null', '', 'na', 'n/a', '-']:
+                    return False  # Tiene al menos un dato
+        
+        return True  # Fila vacía
+    
+    def validate_imei(self, imei: Any, row_number: int = 0, row_data: Dict[str, Any] = None) -> Tuple[bool, str, Optional[str]]:
         """
         Valida un IMEI según las reglas establecidas
+        Genera identificador único SIN_IMEI_xxx cuando no hay IMEI válido
         
         Args:
             imei: Valor del IMEI a validar
+            row_number: Número de fila para generar ID único si no hay IMEI
+            row_data: Datos de la fila para generar ID consistente
             
         Returns:
-            Tuple (es_valido, imei_normalizado o None, mensaje_error o None)
+            Tuple (es_valido, imei_normalizado, mensaje_advertencia o None)
         """
+        # Caso 1: IMEI None
         if imei is None:
-            return False, None, "IMEI es obligatorio"
+            # Generar identificador basado en datos de la fila (consistente entre importaciones)
+            unique_id = self._generate_sin_imei_id(row_number, row_data)
+            return True, unique_id, "sin_imei"
         
         # Convertir a string y limpiar
         imei_str = str(imei).strip()
         
+        # Caso 2: String vacío o valores nulos conocidos
+        if not imei_str or imei_str.lower() in ['nan', 'none', 'null', '', 'na', 'n/a', '-']:
+            unique_id = self._generate_sin_imei_id(row_number, row_data)
+            return True, unique_id, "sin_imei"
+        
         # Remover caracteres no numéricos
         imei_clean = re.sub(r'[^\d]', '', imei_str)
         
+        # Caso 3: Sin dígitos después de limpiar (ej: "---" o "abc")
         if not imei_clean:
-            return False, None, "IMEI vacío o sin dígitos"
+            unique_id = self._generate_sin_imei_id(row_number, row_data)
+            return True, unique_id, "sin_imei"
         
-        # Validar longitud (14-16 dígitos)
+        # Caso 4: IMEI corto (1-13 dígitos) - PERMITIR tal cual
         if len(imei_clean) < 14:
-            return False, None, f"IMEI muy corto: {len(imei_clean)} dígitos (mínimo 14)"
+            return True, imei_clean, f"IMEI incompleto: {len(imei_clean)} dígitos"
         
+        # Caso 5: IMEI válido (14-16 dígitos)
+        if len(imei_clean) >= 14 and len(imei_clean) <= 16:
+            return True, imei_clean, None
+        
+        # Caso 6: IMEI muy largo - tomar los primeros 15 dígitos
         if len(imei_clean) > 16:
-            return False, None, f"IMEI muy largo: {len(imei_clean)} dígitos (máximo 16)"
+            imei_truncated = imei_clean[:15]
+            return True, imei_truncated, f"IMEI truncado de {len(imei_clean)} a 15 dígitos"
         
+        # Caso por defecto - aceptar como está
         return True, imei_clean, None
+    
+    def _generate_sin_imei_id(self, row_number: int, row_data: Dict[str, Any] = None) -> str:
+        """
+        Genera un ID consistente para registros sin IMEI
+        Usa datos de la fila para que sea igual entre importaciones del mismo archivo
+        
+        Args:
+            row_number: Número de fila
+            row_data: Datos de la fila
+            
+        Returns:
+            ID único pero consistente como SIN_IMEI_xxx
+        """
+        if row_data:
+            # Usar campos que identifican la fila de forma única
+            name_ruta = str(row_data.get('Name_Ruta', '')).strip()[:20]
+            dni = str(row_data.get('DNI', '')).strip()
+            account = str(row_data.get('Account', '')).strip()[:10]
+            
+            # Limpiar caracteres especiales
+            name_ruta = re.sub(r'[^a-zA-Z0-9]', '', name_ruta)
+            dni = re.sub(r'[^0-9]', '', dni)
+            account = re.sub(r'[^a-zA-Z0-9]', '', account)
+            
+            # Crear ID basado en estos campos + número de fila
+            if dni:
+                return f"SINIMEI_{dni}_{row_number}"
+            elif name_ruta:
+                return f"SINIMEI_{account}_{name_ruta}_{row_number}"
+            else:
+                return f"SINIMEI_{account}_{row_number}"
+        
+        # Fallback si no hay datos
+        return f"SINIMEI_ROW_{row_number}"
     
     def normalize_dni(self, dni: Any) -> Optional[str]:
         """
@@ -233,25 +315,28 @@ class LDUNormalizationService:
     def normalize_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """
         Normaliza una fila completa del Excel según el mapeo establecido
+        TODOS los registros se importan, incluso sin IMEI
         
         Args:
             row: Diccionario con los datos de una fila
             
         Returns:
             Dict con los datos normalizados para insertar en Supabase
+            Retorna None si la fila debe saltarse (vacía)
         """
-        # Validar IMEI primero
-        imei_valid, imei_normalized, imei_error = self.validate_imei(row.get('IMEI'))
+        # Verificar si es una fila completamente vacía PRIMERO
+        if self._is_empty_row(row):
+            return None  # Fila completamente vacía
         
-        if not imei_valid:
-            return {
-                '_valid': False,
-                '_error_type': 'invalid_imei',
-                '_error_message': imei_error,
-                '_imei_attempted': str(row.get('IMEI', ''))[:50],
-                '_row_number': row.get('_row_number'),
-                '_raw_row': row.get('_raw_row', row)
-            }
+        # Obtener número de fila para generar ID único si es necesario
+        row_number = row.get('_row_number', 0)
+        
+        # Validar/normalizar IMEI (pasando datos de la fila para ID consistente)
+        imei_valid, imei_normalized, imei_warning = self.validate_imei(
+            row.get('IMEI'), 
+            row_number,
+            row  # Pasar datos de la fila para generar ID consistente
+        )
         
         # Normalizar responsable
         dni = self.normalize_dni(row.get('DNI'))
@@ -276,7 +361,15 @@ class LDUNormalizationService:
             'imei': imei_normalized,
             'modelo': self.normalize_model(row.get('MODEL')),
             
-            # Ubicación
+            # Campos de cuenta y ubicación
+            'account': self.normalize_text(row.get('Account')),
+            'account_int': self.normalize_text(row.get('Account_int')),
+            'supervisor': self.normalize_name(row.get('Supervisor')),
+            'zone': self.normalize_text(row.get('Zone')),
+            'departamento': self.normalize_text(row.get('Departamento')),
+            'city': self.normalize_text(row.get('City')),
+            
+            # Ubicación (mantener region para compatibilidad)
             'region': self.normalize_text(row.get('City')),
             'punto_venta': punto_venta,
             'nombre_ruta': nombre_ruta,
@@ -305,8 +398,13 @@ class LDUNormalizationService:
             'fila_origen': row.get('_row_number'),
             
             # Notas internas si hay problemas menores
-            '_warnings': []
+            '_warnings': [],
+            '_imei_warning': imei_warning  # Puede ser None o un mensaje de advertencia
         }
+        
+        # Agregar advertencia de IMEI si existe
+        if imei_warning:
+            normalized['_warnings'].append(imei_warning)
         
         # Agregar advertencias
         if not dni:
@@ -320,29 +418,43 @@ class LDUNormalizationService:
     def normalize_batch(self, rows: List[Dict[str, Any]], file_id: str) -> Dict[str, Any]:
         """
         Normaliza un lote de filas
+        Las filas completamente vacías se saltan
         
         Args:
             rows: Lista de diccionarios con las filas
             file_id: ID del archivo de origen
             
         Returns:
-            Dict con registros válidos, errores y estadísticas
+            Dict con registros válidos y estadísticas
         """
         valid_records = []
-        errors = []
         warnings_count = 0
+        skipped_count = 0
+        sin_imei_count = 0
         
         for row in rows:
             normalized = self.normalize_row(row)
             
+            # Si es None, es una fila vacía - saltar
+            if normalized is None:
+                skipped_count += 1
+                continue
+            
+            # Procesar registros válidos
             if normalized.get('_valid'):
                 # Agregar referencia al archivo
                 normalized['archivo_origen_id'] = file_id
                 normalized['raw_excel_reference'] = f"{file_id}:row_{normalized.get('fila_origen', 'unknown')}"
                 
-                # Contar advertencias
-                if normalized.get('_warnings'):
-                    warnings_count += len(normalized['_warnings'])
+                # Contar advertencias y registros sin IMEI
+                warnings = normalized.get('_warnings', [])
+                if warnings:
+                    warnings_count += len(warnings)
+                
+                # Contar si es un registro sin IMEI original
+                imei_warning = normalized.get('_imei_warning')
+                if imei_warning == 'sin_imei':
+                    sin_imei_count += 1
                 
                 # Remover campos internos antes de insertar
                 clean_record = {k: v for k, v in normalized.items() 
@@ -350,25 +462,18 @@ class LDUNormalizationService:
                 
                 valid_records.append({
                     'record': clean_record,
-                    'warnings': normalized.get('_warnings', []),
+                    'warnings': warnings,
                     'imei': normalized['imei']
-                })
-            else:
-                errors.append({
-                    'row_number': normalized.get('_row_number'),
-                    'error_type': normalized.get('_error_type'),
-                    'error_message': normalized.get('_error_message'),
-                    'imei_attempted': normalized.get('_imei_attempted'),
-                    'raw_row': normalized.get('_raw_row')
                 })
         
         return {
             'valid_records': valid_records,
-            'errors': errors,
+            'errors': [],
             'stats': {
                 'total': len(rows),
                 'valid': len(valid_records),
-                'invalid': len(errors),
+                'skipped': skipped_count,
+                'sin_imei': sin_imei_count,
                 'warnings': warnings_count
             }
         }

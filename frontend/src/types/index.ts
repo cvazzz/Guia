@@ -78,21 +78,39 @@ export interface LDURegistro {
   id: string
   imei: string
   modelo: string | null
-  region: string | null
-  punto_venta: string | null
-  nombre_ruta: string | null
-  cobertura_valor: number | null
-  canal: string | null
-  tipo: string | null
-  campo_reg: string | null
-  campo_ok: string | null
-  uso: string | null
-  observaciones: string | null
+  
+  // Campos de cuenta y ubicación
+  account: string | null           // Account (CLARO, OM, etc.)
+  account_int: string | null       // Account_int (CLARO, RETAIL, PLAZA VEA, etc.)
+  supervisor: string | null        // Supervisor asignado
+  zone: string | null              // Zona (Lima 2, etc.)
+  departamento: string | null      // Departamento
+  city: string | null              // Ciudad
+  
+  // Campos de punto de venta
+  canal: string | null             // Canal (Cac, Retail, Plaza Vea)
+  tipo: string | null              // Tipo (Fijo, Ruta)
+  punto_venta: string | null       // POS_vv
+  nombre_ruta: string | null       // Name_Ruta
+  cobertura_valor: number | null   // HC_Real
+  
+  // Campos de control
+  campo_reg: string | null         // REG
+  campo_ok: string | null          // OK
+  uso: string | null               // USO
+  observaciones: string | null     // OBSERVATION
+  
+  // Estado del dispositivo
   estado: string
   estado_anterior: string | null
-  responsable_dni: string | null
-  responsable_nombre: string | null
-  responsable_apellido: string | null
+  
+  // Responsable
+  responsable_dni: string | null   // DNI
+  responsable_nombre: string | null // First_Name
+  responsable_apellido: string | null // Last_Name
+  
+  // Campos legacy para compatibilidad
+  region: string | null
   raw_row: Record<string, any> | null
   raw_excel_reference: string | null
   archivo_origen_id: string | null
@@ -102,6 +120,11 @@ export interface LDURegistro {
   fecha_registro: string
   fecha_actualizacion: string
   activo: boolean
+  
+  // Campos de sincronización con Drive
+  drive_file_id: string | null
+  drive_sheet_name: string | null
+  drive_row_index: number | null
 }
 
 export interface LDUResponsable {

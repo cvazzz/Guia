@@ -231,6 +231,16 @@ async def buscar_documentos_simple(
     return documentos
 
 
+@app.get("/api/stats")
+async def get_stats():
+    """Obtiene estadísticas generales (alias de estadisticas)."""
+    if not supabase_service:
+        raise HTTPException(status_code=503, detail="Servicio no disponible")
+    
+    stats = supabase_service.get_statistics()
+    return stats
+
+
 @app.get("/api/estadisticas", response_model=StatsResponse)
 async def get_estadisticas():
     """Obtiene estadísticas generales."""

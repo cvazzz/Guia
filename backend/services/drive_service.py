@@ -29,8 +29,11 @@ from config.settings import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Scopes necesarios para Google Drive
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+# Scopes necesarios para Google Drive y Sheets
+SCOPES = [
+    'https://www.googleapis.com/auth/drive',  # Acceso completo a Drive (lectura/escritura)
+    'https://www.googleapis.com/auth/spreadsheets'  # Acceso a Google Sheets
+]
 
 
 class GoogleDriveService:

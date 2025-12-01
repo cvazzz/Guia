@@ -9,7 +9,15 @@ CREATE TABLE IF NOT EXISTS ldu_registros (
     imei VARCHAR(20) UNIQUE NOT NULL,
     modelo VARCHAR(100),
     
-    -- Ubicación
+    -- Campos de cuenta y ubicación (nuevos)
+    account VARCHAR(100),           -- Account (CLARO, OM, etc.)
+    account_int VARCHAR(100),       -- Account_int (CLARO, RETAIL, PLAZA VEA, etc.)
+    supervisor VARCHAR(200),        -- Supervisor asignado
+    zone VARCHAR(100),              -- Zona (Lima 2, etc.)
+    departamento VARCHAR(100),      -- Departamento
+    city VARCHAR(100),              -- Ciudad
+    
+    -- Ubicación (legacy)
     region VARCHAR(100),
     punto_venta VARCHAR(200),
     nombre_ruta VARCHAR(200),
@@ -39,6 +47,11 @@ CREATE TABLE IF NOT EXISTS ldu_registros (
     raw_excel_reference VARCHAR(200),
     archivo_origen_id VARCHAR(200),
     fila_origen INTEGER,
+    
+    -- Referencia a archivo en Drive para sync bidireccional
+    drive_file_id VARCHAR(200),
+    drive_file_name VARCHAR(500),
+    drive_row_index INTEGER,
     
     -- Control de sincronización
     presente_en_ultima_importacion BOOLEAN DEFAULT TRUE,

@@ -28,12 +28,16 @@ import {
   XCircle,
   ArrowLeftRight,
   Loader2,
-  Home
+  Home,
+  Building2,
+  User,
+  Hash
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { LDURegistro, LDUStats, LDUSearchParams, ExcelFile } from '@/types'
 import { ImportWizard } from '@/components/ImportWizard'
+import { Tooltip } from '@/components/Tooltip'
 import Link from 'next/link'
 
 // Componente de tarjeta de estadísticas
@@ -107,81 +111,494 @@ function LDURow({
       className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
     >
       <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
-            <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+        <Tooltip content={
+          <div className="space-y-1">
+            <p className="font-semibold">Dispositivo</p>
+            <p>IMEI: {ldu.imei}</p>
+            <p>Modelo: {ldu.modelo || 'N/A'}</p>
+            {ldu.account && <p>Account: {ldu.account}</p>}
+            {ldu.account_int && <p>Account Int: {ldu.account_int}</p>}
           </div>
-          <div>
-            <p className="font-mono text-sm font-medium text-gray-800 dark:text-white">{ldu.imei}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{ldu.modelo || 'Sin modelo'}</p>
+        } position="right">
+          <div className="flex items-center gap-3 cursor-pointer">
+            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+              <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <p className="font-mono text-sm font-medium text-gray-800 dark:text-white">{ldu.imei}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{ldu.modelo || 'Sin modelo'}</p>
+            </div>
           </div>
-        </div>
+        </Tooltip>
       </td>
       <td className="px-4 py-3">
-        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getEstadoColor(ldu.estado)}`}>
-          {ldu.estado || 'Sin estado'}
-        </span>
+        <Tooltip content={
+          <div className="space-y-1">
+            <p className="font-semibold">Estado del dispositivo</p>
+            <p>Estado actual: {ldu.estado || 'Sin estado'}</p>
+            {ldu.uso && <p>Uso: {ldu.uso}</p>}
+            {ldu.observaciones && <p className="max-w-xs">Obs: {ldu.observaciones}</p>}
+          </div>
+        } position="top">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer ${getEstadoColor(ldu.estado)}`}>
+            {ldu.estado || 'Sin estado'}
+          </span>
+        </Tooltip>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-gray-400" />
-          <div>
-            <p className="text-sm text-gray-800 dark:text-white">{responsableNombre}</p>
-            {ldu.responsable_dni && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">DNI: {ldu.responsable_dni}</p>
+        <Tooltip content={
+          <div className="space-y-1">
+            <p className="font-semibold">Responsable</p>
+            <p>Nombre: {responsableNombre}</p>
+            {ldu.responsable_dni && <p>DNI: {ldu.responsable_dni}</p>}
+            {ldu.supervisor && <p>Supervisor: {ldu.supervisor}</p>}
+          </div>
+        } position="top">
+          <div className="flex items-center gap-2 cursor-pointer">
+            <Users className="w-4 h-4 text-gray-400" />
+            <div>
+              <p className="text-sm text-gray-800 dark:text-white">{responsableNombre}</p>
+              {ldu.responsable_dni && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">DNI: {ldu.responsable_dni}</p>
+              )}
+            </div>
+          </div>
+        </Tooltip>
+      </td>
+      <td className="px-4 py-3">
+        <Tooltip content={
+          <div className="space-y-1">
+            <p className="font-semibold">Ubicación</p>
+            {ldu.city && <p>Ciudad: {ldu.city}</p>}
+            {ldu.zone && <p>Zona: {ldu.zone}</p>}
+            {ldu.departamento && <p>Departamento: {ldu.departamento}</p>}
+            {ldu.punto_venta && <p>PDV: {ldu.punto_venta}</p>}
+            {ldu.nombre_ruta && <p>Ruta: {ldu.nombre_ruta}</p>}
+            {ldu.canal && <p>Canal: {ldu.canal}</p>}
+            {ldu.tipo && <p>Tipo: {ldu.tipo}</p>}
+          </div>
+        } position="top">
+          <div className="flex items-center gap-2 cursor-pointer">
+            <MapPin className="w-4 h-4 text-gray-400" />
+            <div>
+              <p className="text-sm text-gray-800 dark:text-white">{ldu.city || ldu.region || 'Sin región'}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {ldu.punto_venta || ldu.nombre_ruta || ldu.canal || ''}
+              </p>
+            </div>
+          </div>
+        </Tooltip>
+      </td>
+      <td className="px-4 py-3">
+        <Tooltip content={
+          <div className="space-y-1">
+            <p className="font-semibold">Sincronización</p>
+            <p>{ldu.presente_en_ultima_importacion ? '✓ Presente en último Excel' : '⚠ No encontrado en último Excel'}</p>
+            {ldu.fecha_ultima_verificacion && (
+              <p>Última verificación: {new Date(ldu.fecha_ultima_verificacion).toLocaleString()}</p>
             )}
           </div>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-gray-400" />
-          <div>
-            <p className="text-sm text-gray-800 dark:text-white">{ldu.region || 'Sin región'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px]">
-              {ldu.punto_venta || ldu.nombre_ruta || ''}
-            </p>
+        } position="left">
+          <div className="flex items-center gap-1 cursor-pointer">
+            {ldu.presente_en_ultima_importacion ? (
+              <CheckCircle className="w-4 h-4 text-green-500" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            )}
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {ldu.presente_en_ultima_importacion ? 'Sync' : 'No Excel'}
+            </span>
           </div>
-        </div>
+        </Tooltip>
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
-          {ldu.presente_en_ultima_importacion ? (
-            <CheckCircle className="w-4 h-4 text-green-500" />
-          ) : (
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-          )}
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {ldu.presente_en_ultima_importacion ? 'Sincronizado' : 'No en Excel'}
-          </span>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onView(ldu)}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            title="Ver detalles"
-          >
-            <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-          </button>
-          <button
-            onClick={() => onReasignar(ldu)}
-            className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
-            title="Reasignar"
-          >
-            <ArrowLeftRight className="w-4 h-4 text-blue-500" />
-          </button>
-          <button
-            onClick={() => onViewHistory(ldu)}
-            className="p-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-lg transition-colors"
-            title="Ver historial"
-          >
-            <History className="w-4 h-4 text-purple-500" />
-          </button>
+          <Tooltip content="Ver detalles completos" position="top">
+            <button
+              onClick={() => onView(ldu)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <Eye className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Editar registro" position="top">
+            <button
+              onClick={() => onEdit(ldu)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <Edit3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Reasignar a otro responsable" position="top">
+            <button
+              onClick={() => onReasignar(ldu)}
+              className="p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+            >
+              <ArrowLeftRight className="w-4 h-4 text-blue-500" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Ver historial de cambios" position="top">
+            <button
+              onClick={() => onViewHistory(ldu)}
+              className="p-1.5 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-lg transition-colors"
+            >
+              <History className="w-4 h-4 text-purple-500" />
+            </button>
+          </Tooltip>
         </div>
       </td>
     </motion.tr>
+  )
+}
+
+// Modal de edición
+function LDUEditModal({ 
+  ldu, 
+  onClose,
+  onSuccess
+}: { 
+  ldu: LDURegistro
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [syncToDrive, setSyncToDrive] = useState(true)
+  const [formData, setFormData] = useState({
+    modelo: ldu.modelo || '',
+    account: ldu.account || '',
+    account_int: ldu.account_int || '',
+    supervisor: ldu.supervisor || '',
+    zone: ldu.zone || '',
+    departamento: ldu.departamento || '',
+    city: ldu.city || '',
+    canal: ldu.canal || '',
+    tipo: ldu.tipo || '',
+    punto_venta: ldu.punto_venta || '',
+    nombre_ruta: ldu.nombre_ruta || '',
+    cobertura_valor: ldu.cobertura_valor?.toString() || '',
+    campo_reg: ldu.campo_reg || '',
+    campo_ok: ldu.campo_ok || '',
+    uso: ldu.uso || '',
+    observaciones: ldu.observaciones || '',
+    estado: ldu.estado || '',
+    responsable_dni: ldu.responsable_dni || '',
+    responsable_nombre: ldu.responsable_nombre || '',
+    responsable_apellido: ldu.responsable_apellido || '',
+    region: ldu.region || ''
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    try {
+      // Construir solo campos modificados
+      const changes: Record<string, any> = {}
+      
+      Object.entries(formData).forEach(([key, value]) => {
+        const originalValue = (ldu as any)[key]
+        const originalStr = originalValue?.toString() || ''
+        const newStr = value?.toString() || ''
+        
+        if (originalStr !== newStr) {
+          if (key === 'cobertura_valor') {
+            changes[key] = value ? parseFloat(value) : null
+          } else {
+            changes[key] = value || null
+          }
+        }
+      })
+
+      if (Object.keys(changes).length === 0) {
+        toast('No hay cambios para guardar', { icon: 'ℹ️' })
+        onClose()
+        return
+      }
+
+      changes.sync_to_drive = syncToDrive
+
+      const response = await fetch(`/api/ldu/registros/${ldu.imei}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error al actualizar')
+      }
+
+      if (data.drive_synced) {
+        toast.success('Registro actualizado y sincronizado con Drive')
+      } else {
+        toast.success('Registro actualizado')
+      }
+      
+      onSuccess()
+      onClose()
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const estadoOptions = ['Activo', 'Dañado', 'En reparación', 'Pendiente devolución', 'Devuelto', 'Baja', 'Perdido']
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl">
+                <Edit3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">Editar LDU</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{ldu.imei}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[60vh]">
+          <div className="grid grid-cols-3 gap-4">
+            {/* Dispositivo */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <Smartphone className="w-4 h-4" /> Dispositivo
+              </h3>
+              <input
+                type="text"
+                placeholder="Modelo"
+                value={formData.modelo}
+                onChange={e => setFormData({...formData, modelo: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <select
+                value={formData.estado}
+                onChange={e => setFormData({...formData, estado: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              >
+                <option value="">Estado...</option>
+                {estadoOptions.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              <input
+                type="text"
+                placeholder="Uso"
+                value={formData.uso}
+                onChange={e => setFormData({...formData, uso: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Cuenta */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <Building2 className="w-4 h-4" /> Cuenta
+              </h3>
+              <input
+                type="text"
+                placeholder="Account"
+                value={formData.account}
+                onChange={e => setFormData({...formData, account: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Account Int"
+                value={formData.account_int}
+                onChange={e => setFormData({...formData, account_int: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Supervisor"
+                value={formData.supervisor}
+                onChange={e => setFormData({...formData, supervisor: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Responsable */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <User className="w-4 h-4" /> Responsable
+              </h3>
+              <input
+                type="text"
+                placeholder="DNI"
+                value={formData.responsable_dni}
+                onChange={e => setFormData({...formData, responsable_dni: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={formData.responsable_nombre}
+                onChange={e => setFormData({...formData, responsable_nombre: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Apellido"
+                value={formData.responsable_apellido}
+                onChange={e => setFormData({...formData, responsable_apellido: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Ubicación */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <MapPin className="w-4 h-4" /> Ubicación
+              </h3>
+              <input
+                type="text"
+                placeholder="Ciudad"
+                value={formData.city}
+                onChange={e => setFormData({...formData, city: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Zona"
+                value={formData.zone}
+                onChange={e => setFormData({...formData, zone: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Departamento"
+                value={formData.departamento}
+                onChange={e => setFormData({...formData, departamento: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Punto de Venta */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <Package className="w-4 h-4" /> Punto de Venta
+              </h3>
+              <input
+                type="text"
+                placeholder="Canal"
+                value={formData.canal}
+                onChange={e => setFormData({...formData, canal: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Tipo"
+                value={formData.tipo}
+                onChange={e => setFormData({...formData, tipo: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="PDV"
+                value={formData.punto_venta}
+                onChange={e => setFormData({...formData, punto_venta: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Control */}
+            <div className="space-y-3 col-span-3 md:col-span-1">
+              <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2 text-sm">
+                <Hash className="w-4 h-4" /> Control
+              </h3>
+              <input
+                type="text"
+                placeholder="Ruta"
+                value={formData.nombre_ruta}
+                onChange={e => setFormData({...formData, nombre_ruta: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="REG"
+                value={formData.campo_reg}
+                onChange={e => setFormData({...formData, campo_reg: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="OK"
+                value={formData.campo_ok}
+                onChange={e => setFormData({...formData, campo_ok: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Observaciones */}
+            <div className="col-span-3">
+              <textarea
+                placeholder="Observaciones"
+                value={formData.observaciones}
+                onChange={e => setFormData({...formData, observaciones: e.target.value})}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+              />
+            </div>
+
+            {/* Sync to Drive option */}
+            {ldu.drive_file_id && (
+              <div className="col-span-3 flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="syncToDrive"
+                  checked={syncToDrive}
+                  onChange={e => setSyncToDrive(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <label htmlFor="syncToDrive" className="text-sm text-blue-700 dark:text-blue-300">
+                  Sincronizar cambios con Google Sheets automáticamente
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              {loading ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -238,9 +655,18 @@ function LDUDetailModal({
                 <p><span className="text-gray-500">IMEI:</span> <span className="font-mono">{ldu.imei}</span></p>
                 <p><span className="text-gray-500">Modelo:</span> {ldu.modelo || '-'}</p>
                 <p><span className="text-gray-500">Estado:</span> {ldu.estado || '-'}</p>
-                <p><span className="text-gray-500">Canal:</span> {ldu.canal || '-'}</p>
-                <p><span className="text-gray-500">Tipo:</span> {ldu.tipo || '-'}</p>
                 <p><span className="text-gray-500">Uso:</span> {ldu.uso || '-'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <Building2 className="w-4 h-4" /> Cuenta
+              </h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-gray-500">Account:</span> {ldu.account || '-'}</p>
+                <p><span className="text-gray-500">Account Int:</span> {ldu.account_int || '-'}</p>
+                <p><span className="text-gray-500">Supervisor:</span> {ldu.supervisor || '-'}</p>
               </div>
             </div>
 
@@ -259,10 +685,22 @@ function LDUDetailModal({
                 <MapPin className="w-4 h-4" /> Ubicación
               </h3>
               <div className="space-y-2 text-sm">
-                <p><span className="text-gray-500">Región:</span> {ldu.region || '-'}</p>
-                <p><span className="text-gray-500">Punto de venta:</span> {ldu.punto_venta || '-'}</p>
+                <p><span className="text-gray-500">Ciudad:</span> {ldu.city || ldu.region || '-'}</p>
+                <p><span className="text-gray-500">Zona:</span> {ldu.zone || '-'}</p>
+                <p><span className="text-gray-500">Departamento:</span> {ldu.departamento || '-'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                <Package className="w-4 h-4" /> Punto de Venta
+              </h3>
+              <div className="space-y-2 text-sm">
+                <p><span className="text-gray-500">Canal:</span> {ldu.canal || '-'}</p>
+                <p><span className="text-gray-500">Tipo:</span> {ldu.tipo || '-'}</p>
+                <p><span className="text-gray-500">PDV:</span> {ldu.punto_venta || '-'}</p>
                 <p><span className="text-gray-500">Ruta:</span> {ldu.nombre_ruta || '-'}</p>
-                <p><span className="text-gray-500">Cobertura:</span> {ldu.cobertura_valor || '-'}</p>
+                <p><span className="text-gray-500">HC Real:</span> {ldu.cobertura_valor || '-'}</p>
               </div>
             </div>
 
@@ -273,7 +711,8 @@ function LDUDetailModal({
               <div className="space-y-2 text-sm">
                 <p><span className="text-gray-500">En último Excel:</span> {ldu.presente_en_ultima_importacion ? 'Sí' : 'No'}</p>
                 <p><span className="text-gray-500">Última verificación:</span> {ldu.fecha_ultima_verificacion ? new Date(ldu.fecha_ultima_verificacion).toLocaleString() : '-'}</p>
-                <p><span className="text-gray-500">Fecha registro:</span> {new Date(ldu.fecha_registro).toLocaleString()}</p>
+                <p><span className="text-gray-500">REG:</span> {ldu.campo_reg || '-'}</p>
+                <p><span className="text-gray-500">OK:</span> {ldu.campo_ok || '-'}</p>
               </div>
             </div>
           </div>
@@ -631,6 +1070,7 @@ export default function LDUPage() {
   const [selectedLDU, setSelectedLDU] = useState<LDURegistro | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showReasignarModal, setShowReasignarModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -929,7 +1369,7 @@ export default function LDUPage() {
                         key={ldu.id}
                         ldu={ldu}
                         onView={(ldu) => { setSelectedLDU(ldu); setShowDetailModal(true) }}
-                        onEdit={(ldu) => { setSelectedLDU(ldu) }}
+                        onEdit={(ldu) => { setSelectedLDU(ldu); setShowEditModal(true) }}
                         onReasignar={(ldu) => { setSelectedLDU(ldu); setShowReasignarModal(true) }}
                         onViewHistory={(ldu) => { setSelectedLDU(ldu) }}
                       />
@@ -978,6 +1418,13 @@ export default function LDUPage() {
             ldu={selectedLDU}
             onClose={() => setShowReasignarModal(false)}
             onSuccess={loadData}
+          />
+        )}
+        {showEditModal && selectedLDU && (
+          <LDUEditModal
+            ldu={selectedLDU}
+            onClose={() => setShowEditModal(false)}
+            onSuccess={() => { loadData(); setShowEditModal(false) }}
           />
         )}
         {showImportModal && (

@@ -23,8 +23,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// URL de la API del backend
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// URL directa al backend para operaciones largas (evita timeout del proxy)
+const BACKEND_URL = 'http://localhost:8000'
 
 interface ColumnMapping {
   excelColumn: string
@@ -39,23 +39,39 @@ interface ImportWizardProps {
   onSuccess: () => void
 }
 
-// Campos del sistema LDU
+// Campos del sistema LDU - Completos según el Excel
 const SYSTEM_FIELDS = [
-  { key: 'IMEI', label: 'IMEI', required: true, description: 'Identificador único del dispositivo' },
-  { key: 'MODEL', label: 'Modelo', required: false, description: 'Modelo del dispositivo' },
-  { key: 'City', label: 'Región/Ciudad', required: false, description: 'Ubicación regional' },
-  { key: 'POS_vv', label: 'Punto de Venta', required: false, description: 'PDV asignado' },
-  { key: 'Name_Ruta', label: 'Nombre Ruta', required: false, description: 'Ruta de cobertura' },
-  { key: 'HC_Real', label: 'Cobertura', required: false, description: 'Valor de cobertura' },
-  { key: 'DNI', label: 'DNI Responsable', required: false, description: 'DNI del responsable' },
-  { key: 'First_Name', label: 'Nombre', required: false, description: 'Nombre del responsable' },
+  // Identificador principal
+  { key: 'IMEI', label: 'IMEI', required: true, description: 'Identificador único del dispositivo (14-16 dígitos)' },
+  { key: 'MODEL', label: 'Modelo', required: false, description: 'Modelo del dispositivo (ej: Y04, V50 LITE)' },
+  
+  // Campos de cuenta
+  { key: 'Account', label: 'Account', required: false, description: 'Cuenta principal (CLARO, OM, etc.)' },
+  { key: 'Account_int', label: 'Account Int', required: false, description: 'Cuenta interna (CLARO, RETAIL, PLAZA VEA)' },
+  { key: 'Supervisor', label: 'Supervisor', required: false, description: 'Nombre del supervisor asignado' },
+  
+  // Ubicación geográfica
+  { key: 'Zone', label: 'Zona', required: false, description: 'Zona geográfica (Lima 2, etc.)' },
+  { key: 'Departamento', label: 'Departamento', required: false, description: 'Departamento (Lima, Callao, etc.)' },
+  { key: 'City', label: 'Ciudad', required: false, description: 'Ciudad o región' },
+  
+  // Punto de venta
+  { key: 'Canal', label: 'Canal', required: false, description: 'Canal de distribución (Cac, Retail, Plaza Vea)' },
+  { key: 'Tipo', label: 'Tipo', required: false, description: 'Tipo de asignación (Fijo, Ruta)' },
+  { key: 'POS_vv', label: 'Punto de Venta', required: false, description: 'Nombre del PDV asignado' },
+  { key: 'Name_Ruta', label: 'Nombre Ruta', required: false, description: 'Nombre de la ruta de cobertura' },
+  { key: 'HC_Real', label: 'HC Real', required: false, description: 'Valor de cobertura (decimal)' },
+  
+  // Responsable
+  { key: 'DNI', label: 'DNI Responsable', required: false, description: 'DNI del responsable del dispositivo' },
   { key: 'Last_Name', label: 'Apellido', required: false, description: 'Apellido del responsable' },
-  { key: 'Canal', label: 'Canal', required: false, description: 'Canal de distribución' },
-  { key: 'Tipo', label: 'Tipo', required: false, description: 'Tipo de dispositivo' },
-  { key: 'REG', label: 'REG', required: false, description: 'Campo REG' },
-  { key: 'OK', label: 'OK', required: false, description: 'Campo OK' },
-  { key: 'USO', label: 'Uso', required: false, description: 'Estado de uso' },
-  { key: 'OBSERVATION', label: 'Observaciones', required: false, description: 'Notas y observaciones' },
+  { key: 'First_Name', label: 'Nombre', required: false, description: 'Nombre del responsable' },
+  
+  // Campos de control
+  { key: 'REG', label: 'REG', required: false, description: 'Campo de registro' },
+  { key: 'OK', label: 'OK', required: false, description: 'Campo de validación' },
+  { key: 'USO', label: 'Uso', required: false, description: 'Estado de uso del dispositivo' },
+  { key: 'OBSERVATION', label: 'Observaciones', required: false, description: 'Notas y observaciones (determina estado)' },
 ]
 
 export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) {
@@ -89,7 +105,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
   const loadDriveFiles = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/api/ldu/excel-files`)
+      const response = await fetch(`${BACKEND_URL}/api/ldu/excel-files`)
       const data = await response.json()
       if (data.success) {
         setDriveFiles(data.data)
@@ -128,7 +144,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch(`${API_URL}/api/ldu/analyze-excel`, {
+      const response = await fetch(`${BACKEND_URL}/api/ldu/analyze-excel`, {
         method: 'POST',
         body: formData
       })
@@ -170,7 +186,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
       formData.append('file', fileToProcess)
       formData.append('sheet_name', sheetName)
 
-      const response = await fetch(`${API_URL}/api/ldu/preview-excel`, {
+      const response = await fetch(`${BACKEND_URL}/api/ldu/preview-excel`, {
         method: 'POST',
         body: formData
       })
@@ -200,7 +216,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
   const processDriveFile = async (fileId: string) => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_URL}/api/ldu/excel-files/${fileId}/preview?rows=10`)
+      const response = await fetch(`${BACKEND_URL}/api/ldu/excel-files/${fileId}/preview?rows=10`)
       const data = await response.json()
       
       if (data.success) {
@@ -260,7 +276,10 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
         }
       })
 
-      let response
+      console.log('Iniciando importación...', { importSource, file: file?.name, syncToDrive })
+
+      let response: Response | undefined
+      
       if (importSource === 'local' && file) {
         const formData = new FormData()
         formData.append('file', file)
@@ -271,12 +290,14 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
         formData.append('sync_to_drive', String(syncToDrive))
         formData.append('user', 'web_user')
 
-        response = await fetch(`${API_URL}/api/ldu/import-local`, {
+        console.log('Enviando archivo local...')
+        response = await fetch(`${BACKEND_URL}/api/ldu/import-local`, {
           method: 'POST',
           body: formData
         })
       } else if (selectedDriveFile) {
-        response = await fetch(`${API_URL}/api/ldu/import`, {
+        console.log('Importando desde Drive...')
+        response = await fetch(`${BACKEND_URL}/api/ldu/import`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -287,7 +308,19 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
         })
       }
 
-      const data = await response?.json()
+      if (!response) {
+        throw new Error('No se pudo iniciar la importación')
+      }
+
+      console.log('Respuesta recibida:', response.status)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || `Error del servidor: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('Datos de respuesta:', data)
       
       if (data?.success) {
         setImportResult(data.data)
@@ -297,6 +330,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
         throw new Error(data?.detail || 'Error en la importación')
       }
     } catch (error: any) {
+      console.error('Error en importación:', error)
       toast.error(error.message || 'Error en la importación')
     } finally {
       setImporting(false)
@@ -720,7 +754,7 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
                   Los datos han sido procesados correctamente
                 </p>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
                   <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
                     <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                       {importResult.total_filas || 0}
@@ -739,11 +773,17 @@ export function ImportWizard({ isOpen, onClose, onSuccess }: ImportWizardProps) 
                     </p>
                     <p className="text-sm text-amber-600/70">Actualizados</p>
                   </div>
-                  <div className="p-4 bg-red-50 dark:bg-red-900/30 rounded-xl">
-                    <p className="text-3xl font-bold text-red-600 dark:text-red-400">
-                      {importResult.invalidos || 0}
+                  <div className="p-4 bg-purple-50 dark:bg-purple-900/30 rounded-xl">
+                    <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                      {importResult.sin_imei || 0}
                     </p>
-                    <p className="text-sm text-red-600/70">Con errores</p>
+                    <p className="text-sm text-purple-600/70">Sin IMEI</p>
+                  </div>
+                  <div className="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
+                    <p className="text-3xl font-bold text-gray-500 dark:text-gray-400">
+                      {importResult.sin_cambios || 0}
+                    </p>
+                    <p className="text-sm text-gray-500/70">Sin cambios</p>
                   </div>
                 </div>
 
