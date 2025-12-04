@@ -2,6 +2,8 @@
 Configuración central del sistema de automatización documental.
 """
 import os
+import json
+import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -19,8 +21,26 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 # Google Drive Configuration
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
-GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
+
+# Soporte para credenciales desde variable de entorno (para Render/producción)
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
+GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON", "")
+
+if GOOGLE_CREDENTIALS_JSON:
+    # Crear archivo temporal con las credenciales
+    creds_path = Path(tempfile.gettempdir()) / "google_credentials.json"
+    creds_path.write_text(GOOGLE_CREDENTIALS_JSON)
+    GOOGLE_CREDENTIALS_FILE = str(creds_path)
+else:
+    GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+
+if GOOGLE_TOKEN_JSON:
+    # Crear archivo temporal con el token
+    token_path = Path(tempfile.gettempdir()) / "google_token.json"
+    token_path.write_text(GOOGLE_TOKEN_JSON)
+    GOOGLE_TOKEN_FILE = str(token_path)
+else:
+    GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 
 # Carpeta específica para archivos LDU
 LDU_DRIVE_FOLDER_ID = os.getenv("LDU_DRIVE_FOLDER_ID", "1XS0zv5Q6oj-Z7nZqyg9a8zcomLhndhjk")
