@@ -22,24 +22,39 @@ LOGS_DIR.mkdir(exist_ok=True)
 # Google Drive Configuration
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
 
-# Soporte para credenciales desde variable de entorno (para Render/producción)
+# Soporte para Service Account (recomendado para producción)
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+GOOGLE_SERVICE_ACCOUNT_FILE = None
+
+# Soporte para credenciales OAuth (desarrollo local)
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
 GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON", "")
 
-if GOOGLE_CREDENTIALS_JSON:
-    # Crear archivo temporal con las credenciales
+# Determinar el modo de autenticación
+USE_SERVICE_ACCOUNT = bool(GOOGLE_SERVICE_ACCOUNT_JSON)
+
+if GOOGLE_SERVICE_ACCOUNT_JSON:
+    # Service Account (producción)
+    sa_path = Path(tempfile.gettempdir()) / "google_service_account.json"
+    sa_path.write_text(GOOGLE_SERVICE_ACCOUNT_JSON)
+    GOOGLE_SERVICE_ACCOUNT_FILE = str(sa_path)
+    GOOGLE_CREDENTIALS_FILE = None
+    GOOGLE_TOKEN_FILE = None
+elif GOOGLE_CREDENTIALS_JSON:
+    # OAuth desde variable de entorno
     creds_path = Path(tempfile.gettempdir()) / "google_credentials.json"
     creds_path.write_text(GOOGLE_CREDENTIALS_JSON)
     GOOGLE_CREDENTIALS_FILE = str(creds_path)
+    
+    if GOOGLE_TOKEN_JSON:
+        token_path = Path(tempfile.gettempdir()) / "google_token.json"
+        token_path.write_text(GOOGLE_TOKEN_JSON)
+        GOOGLE_TOKEN_FILE = str(token_path)
+    else:
+        GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 else:
+    # OAuth desde archivos locales (desarrollo)
     GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-
-if GOOGLE_TOKEN_JSON:
-    # Crear archivo temporal con el token
-    token_path = Path(tempfile.gettempdir()) / "google_token.json"
-    token_path.write_text(GOOGLE_TOKEN_JSON)
-    GOOGLE_TOKEN_FILE = str(token_path)
-else:
     GOOGLE_TOKEN_FILE = os.getenv("GOOGLE_TOKEN_FILE", "token.json")
 
 # Carpeta específica para archivos LDU

@@ -1,6 +1,7 @@
 """
 Servicio de conexión y monitoreo de Google Drive.
 Maneja autenticación, descarga de archivos TIF y monitoreo de carpeta.
+Soporta tanto OAuth (desarrollo) como Service Account (producción).
 """
 import os
 import io
@@ -12,6 +13,7 @@ from datetime import datetime
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -21,6 +23,8 @@ from config.settings import (
     GOOGLE_DRIVE_FOLDER_ID,
     GOOGLE_CREDENTIALS_FILE,
     GOOGLE_TOKEN_FILE,
+    GOOGLE_SERVICE_ACCOUNT_FILE,
+    USE_SERVICE_ACCOUNT,
     TEMP_DIR,
     DRIVE_POLLING_INTERVAL
 )
@@ -48,11 +52,22 @@ class GoogleDriveService:
     def authenticate(self) -> bool:
         """
         Autentica con Google Drive API.
-        Maneja tokens existentes y refresco de credenciales.
+        Soporta Service Account (producción) y OAuth (desarrollo).
         """
         try:
-            # Verificar si existe token guardado
-            if os.path.exists(GOOGLE_TOKEN_FILE):
+            # Método 1: Service Account (recomendado para producción)
+            if USE_SERVICE_ACCOUNT and GOOGLE_SERVICE_ACCOUNT_FILE:
+                logger.info("Autenticando con Service Account...")
+                self.creds = service_account.Credentials.from_service_account_file(
+                    GOOGLE_SERVICE_ACCOUNT_FILE,
+                    scopes=SCOPES
+                )
+                self.service = build('drive', 'v3', credentials=self.creds)
+                logger.info("Autenticación con Service Account exitosa.")
+                return True
+            
+            # Método 2: OAuth (desarrollo local)
+            if GOOGLE_TOKEN_FILE and os.path.exists(GOOGLE_TOKEN_FILE):
                 self.creds = Credentials.from_authorized_user_file(
                     GOOGLE_TOKEN_FILE, SCOPES
                 )
@@ -63,8 +78,8 @@ class GoogleDriveService:
                     logger.info("Refrescando token de Google Drive...")
                     self.creds.refresh(Request())
                 else:
-                    if not os.path.exists(GOOGLE_CREDENTIALS_FILE):
-                        logger.error(f"No se encontró {GOOGLE_CREDENTIALS_FILE}")
+                    if not GOOGLE_CREDENTIALS_FILE or not os.path.exists(GOOGLE_CREDENTIALS_FILE):
+                        logger.error(f"No se encontró archivo de credenciales")
                         return False
                     
                     logger.info("Iniciando flujo de autenticación OAuth...")
@@ -74,9 +89,10 @@ class GoogleDriveService:
                     self.creds = flow.run_local_server(port=0)
                 
                 # Guardar token para uso futuro
-                with open(GOOGLE_TOKEN_FILE, 'w') as token:
-                    token.write(self.creds.to_json())
-                logger.info("Token guardado exitosamente.")
+                if GOOGLE_TOKEN_FILE:
+                    with open(GOOGLE_TOKEN_FILE, 'w') as token:
+                        token.write(self.creds.to_json())
+                    logger.info("Token guardado exitosamente.")
             
             # Construir servicio
             self.service = build('drive', 'v3', credentials=self.creds)
