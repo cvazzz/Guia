@@ -78,7 +78,6 @@ class UpdateRegistroRequest(BaseModel):
     responsable_nombre: Optional[str] = None
     responsable_apellido: Optional[str] = None
     region: Optional[str] = None
-    sync_to_drive: bool = Field(default=True, description="Sincronizar cambios a Google Sheets")
     user: str = Field(default="system", description="Usuario que realiza la operación")
 
 
@@ -520,72 +519,6 @@ async def update_registro(imei: str, request: UpdateRegistroRequest):
         ).eq('imei', imei).execute()
         
         updated_record = result.data[0] if result.data else None
-        drive_synced = False
-        
-        # Sincronizar con Google Sheets si está habilitado
-        if request.sync_to_drive and updated_record:
-            drive_file_id = existing.get('drive_file_id')
-            drive_sheet_name = existing.get('drive_sheet_name', 'Sheet1')
-            drive_row_index = existing.get('drive_row_index')
-            
-            if drive_file_id and drive_row_index:
-                try:
-                    # Obtener mapeo dinámico de columnas desde el header del Sheet
-                    header_to_column = excel_drive_service.get_column_letters(
-                        spreadsheet_id=drive_file_id,
-                        sheet_name=drive_sheet_name
-                    )
-                    
-                    # Mapeo de campos de DB a nombres de columnas del Excel
-                    db_to_excel_header = {
-                        'imei': 'IMEI',
-                        'modelo': 'MODEL',
-                        'account': 'Account',
-                        'account_int': 'Account_int',
-                        'responsable_dni': 'DNI',
-                        'responsable_nombre': 'First_Name',
-                        'responsable_apellido': 'Last_Name',
-                        'supervisor': 'Supervisor',
-                        'zone': 'Zone',
-                        'departamento': 'Departamento',
-                        'city': 'City',
-                        'canal': 'Canal',
-                        'tipo': 'Tipo',
-                        'punto_venta': 'POS_vv',
-                        'nombre_ruta': 'Name_Ruta',
-                        'cobertura_valor': 'HC_Real',
-                        'campo_reg': 'REG',
-                        'campo_ok': 'OK',
-                        'uso': 'USO',
-                        'observaciones': 'OBSERVATION',
-                        'estado': 'Estado',
-                        'region': 'Region'
-                    }
-                    
-                    # Actualizar cada celda modificada
-                    for field, value in update_data.items():
-                        if field in db_to_excel_header and field != 'fecha_actualizacion':
-                            excel_header = db_to_excel_header[field]
-                            # Buscar la columna correspondiente (case-insensitive)
-                            col = None
-                            for header, col_letter in header_to_column.items():
-                                if header.lower() == excel_header.lower():
-                                    col = col_letter
-                                    break
-                            
-                            if col:
-                                excel_drive_service.update_sheet_cell(
-                                    spreadsheet_id=drive_file_id,
-                                    sheet_name=drive_sheet_name,
-                                    row=drive_row_index,
-                                    column=col,
-                                    value=str(value) if value is not None else ''
-                                )
-                    
-                    drive_synced = True
-                except Exception as drive_error:
-                    # Log error pero no fallar la operación
-                    print(f"Error sincronizando con Drive: {drive_error}")
         
         # Registrar auditoría
         ldu_sync_service._register_audit(
@@ -603,8 +536,7 @@ async def update_registro(imei: str, request: UpdateRegistroRequest):
         return {
             "success": True,
             "message": "Registro actualizado correctamente",
-            "data": updated_record,
-            "drive_synced": drive_synced
+            "data": updated_record
         }
         
     except HTTPException:
@@ -1277,5 +1209,218 @@ async def get_danados():
             "data": result.data,
             "total": len(result.data)
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== ENDPOINTS DE EXPORTACIÓN ====================
+
+from fastapi.responses import StreamingResponse
+
+@router.get("/export")
+async def export_ldu_excel(
+    region: Optional[str] = None,
+    estado: Optional[str] = None,
+    solo_activos: bool = True,
+    incluir_ausentes: bool = False
+):
+    """
+    Exporta los registros LDU a un archivo Excel para descargar
+    
+    Args:
+        region: Filtrar por región específica
+        estado: Filtrar por estado (Activo, Dañado, etc.)
+        solo_activos: Solo incluir registros activos
+        incluir_ausentes: Incluir registros no presentes en última importación
+    """
+    try:
+        # Construir query
+        q = ldu_sync_service.supabase.table('ldu_registros').select('*')
+        
+        if solo_activos:
+            q = q.eq('activo', True)
+        
+        if region:
+            q = q.eq('region', region)
+            
+        if estado:
+            q = q.eq('estado', estado)
+            
+        if not incluir_ausentes:
+            q = q.eq('presente_en_ultima_importacion', True)
+        
+        result = q.order('imei').execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="No hay registros para exportar")
+        
+        # Convertir a DataFrame
+        df = pd.DataFrame(result.data)
+        
+        # Ordenar y seleccionar columnas relevantes
+        columnas_export = [
+            'imei', 'modelo', 'account', 'account_int',
+            'responsable_dni', 'responsable_nombre', 'responsable_apellido',
+            'supervisor', 'zone', 'departamento', 'city', 'region',
+            'canal', 'tipo', 'punto_venta', 'nombre_ruta',
+            'cobertura_valor', 'campo_reg', 'campo_ok', 'uso',
+            'observaciones', 'estado', 'activo',
+            'presente_en_ultima_importacion', 'fecha_actualizacion'
+        ]
+        
+        # Solo incluir columnas que existen
+        columnas_existentes = [c for c in columnas_export if c in df.columns]
+        df = df[columnas_existentes]
+        
+        # Renombrar columnas para mejor lectura
+        rename_map = {
+            'imei': 'IMEI',
+            'modelo': 'Modelo',
+            'account': 'Account',
+            'account_int': 'Account_Int',
+            'responsable_dni': 'DNI_Responsable',
+            'responsable_nombre': 'Nombre',
+            'responsable_apellido': 'Apellido',
+            'supervisor': 'Supervisor',
+            'zone': 'Zona',
+            'departamento': 'Departamento',
+            'city': 'Ciudad',
+            'region': 'Región',
+            'canal': 'Canal',
+            'tipo': 'Tipo',
+            'punto_venta': 'Punto_Venta',
+            'nombre_ruta': 'Ruta',
+            'cobertura_valor': 'HC_Real',
+            'campo_reg': 'REG',
+            'campo_ok': 'OK',
+            'uso': 'USO',
+            'observaciones': 'Observaciones',
+            'estado': 'Estado',
+            'activo': 'Activo',
+            'presente_en_ultima_importacion': 'En_Ultimo_Excel',
+            'fecha_actualizacion': 'Fecha_Actualizacion'
+        }
+        df = df.rename(columns=rename_map)
+        
+        # Crear Excel en memoria
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='LDU_Registros', index=False)
+            
+            # Ajustar anchos de columna
+            worksheet = writer.sheets['LDU_Registros']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).map(len).max() if len(df) > 0 else 0,
+                    len(col)
+                ) + 2
+                worksheet.column_dimensions[chr(65 + idx) if idx < 26 else f"A{chr(65 + idx - 26)}"].width = min(max_length, 50)
+        
+        output.seek(0)
+        
+        # Generar nombre de archivo
+        fecha = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"LDU_Export_{fecha}.xlsx"
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/historial/{imei}")
+async def get_historial_completo(imei: str):
+    """
+    Obtiene el historial completo de cambios de un registro LDU
+    Incluye auditoría general, cambios de responsable y conflictos resueltos
+    """
+    try:
+        # Verificar que el IMEI existe
+        registro = ldu_sync_service.supabase.table('ldu_registros').select('*').eq('imei', imei).execute()
+        
+        if not registro.data:
+            raise HTTPException(status_code=404, detail=f"IMEI {imei} no encontrado")
+        
+        # Obtener auditoría general
+        auditoria = ldu_sync_service.supabase.table('ldu_auditoria').select('*').eq(
+            'imei', imei
+        ).order('fecha_hora', desc=True).execute()
+        
+        # Obtener historial de responsables
+        historial_resp = ldu_sync_service.supabase.table('ldu_historial_responsables').select('*').eq(
+            'ldu_imei', imei
+        ).order('fecha_cambio', desc=True).execute()
+        
+        # Obtener conflictos (pendientes y resueltos)
+        conflictos = ldu_sync_service.supabase.table('ldu_conflictos').select('*').eq(
+            'imei', imei
+        ).order('fecha_conflicto', desc=True).execute()
+        
+        # Combinar y ordenar todos los eventos cronológicamente
+        eventos = []
+        
+        for a in auditoria.data:
+            eventos.append({
+                'tipo': 'cambio',
+                'accion': a.get('accion'),
+                'fecha': a.get('fecha_hora'),
+                'usuario': a.get('usuario_sistema'),
+                'archivo': a.get('archivo_origen'),
+                'campos_previos': a.get('campos_previos'),
+                'campos_nuevos': a.get('campos_nuevos'),
+                'comentarios': a.get('comentarios')
+            })
+        
+        for h in historial_resp.data:
+            eventos.append({
+                'tipo': 'reasignacion',
+                'accion': 'cambio_responsable',
+                'fecha': h.get('fecha_cambio'),
+                'usuario': h.get('usuario_cambio'),
+                'responsable_anterior': f"{h.get('responsable_anterior_nombre', '')} (DNI: {h.get('responsable_anterior_dni', '')})",
+                'responsable_nuevo': f"{h.get('responsable_nuevo_nombre', '')} (DNI: {h.get('responsable_nuevo_dni', '')})",
+                'motivo': h.get('motivo'),
+                'comentarios': h.get('comentarios')
+            })
+        
+        for c in conflictos.data:
+            eventos.append({
+                'tipo': 'conflicto',
+                'accion': f"conflicto_{c.get('estado', 'pendiente')}",
+                'fecha': c.get('fecha_conflicto'),
+                'campo': c.get('campo'),
+                'valor_actual': c.get('valor_actual'),
+                'valor_excel': c.get('valor_excel'),
+                'estado': c.get('estado'),
+                'resuelto_por': c.get('resuelto_por'),
+                'fecha_resolucion': c.get('fecha_resolucion'),
+                'valor_final': c.get('valor_final')
+            })
+        
+        # Ordenar por fecha descendente
+        eventos.sort(key=lambda x: x.get('fecha', '') or '', reverse=True)
+        
+        return {
+            "success": True,
+            "imei": imei,
+            "registro_actual": registro.data[0],
+            "historial": eventos,
+            "totales": {
+                "cambios": len(auditoria.data),
+                "reasignaciones": len(historial_resp.data),
+                "conflictos": len(conflictos.data)
+            }
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

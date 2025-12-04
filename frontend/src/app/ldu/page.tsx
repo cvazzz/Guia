@@ -263,7 +263,6 @@ function LDUEditModal({
   onSuccess: () => void
 }) {
   const [loading, setLoading] = useState(false)
-  const [syncToDrive, setSyncToDrive] = useState(true)
   const [formData, setFormData] = useState({
     modelo: ldu.modelo || '',
     account: ldu.account || '',
@@ -316,8 +315,6 @@ function LDUEditModal({
         return
       }
 
-      changes.sync_to_drive = syncToDrive
-
       const response = await fetch(`/api/ldu/registros/${ldu.imei}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -330,11 +327,7 @@ function LDUEditModal({
         throw new Error(data.detail || 'Error al actualizar')
       }
 
-      if (data.drive_synced) {
-        toast.success('Registro actualizado y sincronizado con Drive')
-      } else {
-        toast.success('Registro actualizado')
-      }
+      toast.success('Registro actualizado correctamente')
       
       onSuccess()
       onClose()
@@ -561,22 +554,6 @@ function LDUEditModal({
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
               />
             </div>
-
-            {/* Sync to Drive option */}
-            {ldu.drive_file_id && (
-              <div className="col-span-3 flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                <input
-                  type="checkbox"
-                  id="syncToDrive"
-                  checked={syncToDrive}
-                  onChange={e => setSyncToDrive(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded"
-                />
-                <label htmlFor="syncToDrive" className="text-sm text-blue-700 dark:text-blue-300">
-                  Sincronizar cambios con Google Sheets automáticamente
-                </label>
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1058,6 +1035,222 @@ function ImportModal({
   )
 }
 
+// Modal de Historial de Cambios
+function LDUHistoryModal({ 
+  imei, 
+  onClose 
+}: { 
+  imei: string
+  onClose: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [historial, setHistorial] = useState<any[]>([])
+  const [registro, setRegistro] = useState<any>(null)
+  const [totales, setTotales] = useState({ cambios: 0, reasignaciones: 0, conflictos: 0 })
+
+  useEffect(() => {
+    const loadHistorial = async () => {
+      try {
+        const response = await fetch(`/api/ldu/historial/${imei}`)
+        const data = await response.json()
+        
+        if (data.success) {
+          setHistorial(data.historial || [])
+          setRegistro(data.registro_actual)
+          setTotales(data.totales || { cambios: 0, reasignaciones: 0, conflictos: 0 })
+        }
+      } catch (error) {
+        console.error('Error:', error)
+        toast.error('Error cargando historial')
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadHistorial()
+  }, [imei])
+
+  const getEventIcon = (tipo: string, accion: string) => {
+    if (tipo === 'reasignacion') return <ArrowLeftRight className="w-4 h-4 text-blue-500" />
+    if (tipo === 'conflicto') return <AlertTriangle className="w-4 h-4 text-amber-500" />
+    if (accion === 'create' || accion === 'insert') return <CheckCircle className="w-4 h-4 text-green-500" />
+    if (accion === 'update' || accion === 'update_manual') return <Edit3 className="w-4 h-4 text-indigo-500" />
+    return <Clock className="w-4 h-4 text-gray-500" />
+  }
+
+  const getEventColor = (tipo: string) => {
+    if (tipo === 'reasignacion') return 'border-l-blue-500 bg-blue-50 dark:bg-blue-900/20'
+    if (tipo === 'conflicto') return 'border-l-amber-500 bg-amber-50 dark:bg-amber-900/20'
+    return 'border-l-indigo-500 bg-gray-50 dark:bg-gray-700/50'
+  }
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A'
+    return new Date(dateStr).toLocaleString('es-PE', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    })
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-xl">
+                <History className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-white">Historial de Cambios</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">{imei}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Stats */}
+          <div className="flex gap-4 mt-4">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
+              <Edit3 className="w-4 h-4 text-indigo-600" />
+              <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">{totales.cambios} cambios</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+              <ArrowLeftRight className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">{totales.reasignaciones} reasignaciones</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 dark:bg-amber-900/50 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              <span className="text-sm font-medium text-amber-700 dark:text-amber-300">{totales.conflictos} conflictos</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            </div>
+          ) : historial.length === 0 ? (
+            <div className="text-center py-12">
+              <History className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No hay historial de cambios</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {historial.map((evento, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-xl border-l-4 ${getEventColor(evento.tipo)}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                      {getEventIcon(evento.tipo, evento.accion)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-800 dark:text-white capitalize">
+                          {evento.tipo === 'reasignacion' ? 'Cambio de Responsable' : 
+                           evento.tipo === 'conflicto' ? 'Conflicto Detectado' :
+                           evento.accion?.replace(/_/g, ' ') || 'Cambio'}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatDate(evento.fecha)}
+                        </span>
+                      </div>
+
+                      {/* Detalles según tipo */}
+                      {evento.tipo === 'reasignacion' && (
+                        <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                          <p><span className="text-gray-500">De:</span> {evento.responsable_anterior || 'N/A'}</p>
+                          <p><span className="text-gray-500">A:</span> {evento.responsable_nuevo || 'N/A'}</p>
+                          {evento.motivo && <p><span className="text-gray-500">Motivo:</span> {evento.motivo}</p>}
+                        </div>
+                      )}
+
+                      {evento.tipo === 'conflicto' && (
+                        <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                          <p><span className="text-gray-500">Campo:</span> {evento.campo}</p>
+                          <p><span className="text-gray-500">Valor actual:</span> {evento.valor_actual || 'N/A'}</p>
+                          <p><span className="text-gray-500">Valor Excel:</span> {evento.valor_excel || 'N/A'}</p>
+                          <p><span className="text-gray-500">Estado:</span> 
+                            <span className={`ml-1 px-2 py-0.5 rounded text-xs ${
+                              evento.estado === 'pendiente' ? 'bg-amber-100 text-amber-700' :
+                              'bg-green-100 text-green-700'
+                            }`}>
+                              {evento.estado}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+
+                      {evento.tipo === 'cambio' && evento.campos_nuevos && (
+                        <div className="text-sm text-gray-600 dark:text-gray-300">
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {Object.keys(evento.campos_nuevos).slice(0, 5).map((campo, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded text-xs">
+                                {campo}
+                              </span>
+                            ))}
+                            {Object.keys(evento.campos_nuevos).length > 5 && (
+                              <span className="text-xs text-gray-500">+{Object.keys(evento.campos_nuevos).length - 5} más</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {evento.usuario && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                          Por: {evento.usuario}
+                        </p>
+                      )}
+                      
+                      {evento.comentarios && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
+                          {evento.comentarios}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // Página principal
 export default function LDUPage() {
   const [registros, setRegistros] = useState<LDURegistro[]>([])
@@ -1074,6 +1267,8 @@ export default function LDUPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -1162,6 +1357,41 @@ export default function LDUPage() {
     loadData()
   }
 
+  const handleExportExcel = async () => {
+    setExporting(true)
+    try {
+      // Construir query params con los filtros actuales
+      const params = new URLSearchParams()
+      if (filters.estado) params.append('estado', filters.estado)
+      if (filters.region) params.append('region', filters.region)
+      if (filters.presente === 'false') params.append('incluir_ausentes', 'true')
+      
+      const response = await fetch(`/api/ldu/export?${params.toString()}`)
+      
+      if (!response.ok) {
+        throw new Error('Error al exportar')
+      }
+      
+      // Descargar el archivo
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `LDU_Export_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      toast.success('Excel exportado correctamente')
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al exportar Excel')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -1187,6 +1417,19 @@ export default function LDUPage() {
             <div className="flex gap-3 items-center">
               {/* Badge de conflictos */}
               <ConflictsBadge onResolve={loadData} />
+              
+              <button
+                onClick={handleExportExcel}
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-xl transition-colors border border-emerald-400/30 disabled:opacity-50"
+              >
+                {exporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {exporting ? 'Exportando...' : 'Descargar Excel'}
+              </button>
               
               <button
                 onClick={() => setShowImportModal(true)}
@@ -1375,7 +1618,7 @@ export default function LDUPage() {
                         onView={(ldu) => { setSelectedLDU(ldu); setShowDetailModal(true) }}
                         onEdit={(ldu) => { setSelectedLDU(ldu); setShowEditModal(true) }}
                         onReasignar={(ldu) => { setSelectedLDU(ldu); setShowReasignarModal(true) }}
-                        onViewHistory={(ldu) => { setSelectedLDU(ldu) }}
+                        onViewHistory={(ldu) => { setSelectedLDU(ldu); setShowHistoryModal(true) }}
                       />
                     ))}
                   </tbody>
@@ -1436,6 +1679,12 @@ export default function LDUPage() {
             isOpen={showImportModal}
             onClose={() => setShowImportModal(false)}
             onSuccess={loadData}
+          />
+        )}
+        {showHistoryModal && selectedLDU && (
+          <LDUHistoryModal
+            imei={selectedLDU.imei}
+            onClose={() => setShowHistoryModal(false)}
           />
         )}
       </AnimatePresence>
